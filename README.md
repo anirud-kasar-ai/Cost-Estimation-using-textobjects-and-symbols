@@ -61,4 +61,11 @@ cd frontend && npm run dev
 
 ## License / notes
 
-POC for local single-user use. Bid PDFs under `Real data/` are gitignored and not published with this repo.
+POC for local single-user use.
+
+Sample bid drawings live in [`Real data/`](Real%20data/) (stored with **Git LFS**). Generated requirement PDFs are under `Real data/requirements/` and `hvac-cost-estimator/backend/storage/requirements/`.
+
+```bash
+git lfs install
+git clone https://github.com/anirud-kasar-ai/Cost-Estimation-using-textobjects-and-symbols.git
+```

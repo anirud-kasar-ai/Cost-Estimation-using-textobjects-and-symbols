@@ -1,0 +1,2 @@
+Real[[:space:]]data/**/*.pdf filter=lfs diff=lfs merge=lfs -text
+hvac-cost-estimator/backend/storage/requirements/**/*.pdf filter=lfs diff=lfs merge=lfs -text

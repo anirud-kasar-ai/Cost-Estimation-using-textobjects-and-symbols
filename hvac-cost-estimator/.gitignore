@@ -18,6 +18,8 @@ backend/models/*
 # Uploaded PDFs + intermediate images + SQLite DB
 backend/storage/*
 !backend/storage/.gitkeep
+!backend/storage/requirements/
+!backend/storage/requirements/**
 *.db
 *.sqlite3
 

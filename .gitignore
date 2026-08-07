@@ -30,13 +30,15 @@ coverage/
 # App runtime / uploads / generated artifacts
 hvac-cost-estimator/backend/storage/*
 !hvac-cost-estimator/backend/storage/.gitkeep
+# Keep generated requirement PDFs in the repo
+!hvac-cost-estimator/backend/storage/requirements/
+!hvac-cost-estimator/backend/storage/requirements/**
 hvac-cost-estimator/backend/models/*
 !hvac-cost-estimator/backend/models/.gitkeep
 mlruns/
 
-# Large local bid sets / proprietary drawings (keep locally, do not push)
-Real data/
-**/Real data/
+# Duplicate / scratch requirement copies
+Real data/requirements - Copy/
 
 # OS / editors
 .idea/
