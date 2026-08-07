@@ -1,0 +1,31 @@
+# Base dependencies — enough to run the full pipeline end-to-end with mocked
+# model outputs (HVAC_USE_MOCK_MODELS=true). Python 3.10+.
+#
+# Real model inference additionally needs requirements-ml.txt.
+
+fastapi>=0.110,<1
+uvicorn[standard]>=0.29,<1
+python-multipart>=0.0.9
+
+pydantic>=2.6,<3
+pydantic-settings>=2.2,<3
+
+sqlalchemy>=2.0,<3
+
+# PDF -> image. pdf2image requires the poppler binaries; PyMuPDF is a
+# pip-only fallback used automatically when poppler is missing.
+pdf2image>=1.17
+pymupdf>=1.24
+pillow>=10.2
+
+# Fuzzy field-name matching for title-block metadata
+rapidfuzz>=3.6
+
+numpy>=1.26,<3
+
+# Synthetic sample-PDF generation (scripts/generate_sample_pdf.py)
+reportlab>=4.1
+
+# Testing
+pytest>=8.0
+httpx>=0.27

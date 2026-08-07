@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+
+# Model weights (drop trained weights here manually)
+backend/models/*
+!backend/models/.gitkeep
+
+# Uploaded PDFs + intermediate images + SQLite DB
+backend/storage/*
+!backend/storage/.gitkeep
+*.db
+*.sqlite3
+
+# MLflow local tracking
+mlruns/
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Extra env patterns
+.env.*
+!.env.example

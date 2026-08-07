@@ -1,0 +1,13 @@
+{
+  "currency": "USD",
+  "default_unit_cost": 100.0,
+  "rates": {
+    "supply_air_diffuser": { "display_name": "Supply Air Diffuser", "unit_cost": 185.0 },
+    "return_air_grille": { "display_name": "Return Air Grille", "unit_cost": 140.0 },
+    "exhaust_grille": { "display_name": "Exhaust Grille", "unit_cost": 160.0 },
+    "co2_sensor": { "display_name": "CO2 Sensor", "unit_cost": 320.0 },
+    "temperature_sensor": { "display_name": "Temperature Sensor", "unit_cost": 210.0 },
+    "thermostat": { "display_name": "Thermostat", "unit_cost": 265.0 },
+    "vav_box": { "display_name": "VAV Box", "unit_cost": 850.0 }
+  }
+}

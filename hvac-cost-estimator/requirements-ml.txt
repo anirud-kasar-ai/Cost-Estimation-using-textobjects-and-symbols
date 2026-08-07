@@ -1,0 +1,26 @@
+# Optional heavy ML dependencies — only needed when HVAC_USE_MOCK_MODELS=false,
+# i.e. when running real inference with trained weights.
+#
+# Install AFTER requirements.txt:
+#   pip install -r requirements-ml.txt
+#
+# NOTE (Windows): detectron2 has no official wheels and must be built from
+# source with the Visual Studio C++ Build Tools installed:
+#   pip install "git+https://github.com/facebookresearch/detectron2.git"
+# See https://detectron2.readthedocs.io/en/latest/tutorials/install.html
+
+torch>=2.2
+torchvision>=0.17
+timm>=0.9
+
+# Exported classifier inference (preferred over loading the training checkpoint)
+onnxruntime>=1.17
+
+# Title-block OCR
+paddlepaddle>=2.6
+paddleocr>=2.7
+
+# Experiment tracking (local file-based, optional)
+mlflow>=2.11
+
+# detectron2 — install from source, see note above.
