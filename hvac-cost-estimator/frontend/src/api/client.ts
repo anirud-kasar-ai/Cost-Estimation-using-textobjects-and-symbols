@@ -3,7 +3,10 @@
 import axios from 'axios';
 
 import type {
+  DetectionReview,
   DeviceLineUpdate,
+  PricingItem,
+  PricingItemUpdate,
   ProjectDetail,
   ProjectSummary,
   UploadResponse,
@@ -85,4 +88,57 @@ export async function downloadRequirementPdf(
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+/** Download the extracted ``<name> technical symbol.pdf``. */
+export async function downloadTechnicalSymbolPdf(
+  projectId: string,
+  filename: string,
+): Promise<void> {
+  const { data } = await api.get<Blob>(`/projects/${projectId}/technical-symbol.pdf`, {
+    responseType: 'blob',
+  });
+  const url = URL.createObjectURL(data);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${filename.replace(/\.pdf$/i, '')} technical symbol.pdf`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function getLineReview(
+  projectId: string,
+  lineId: string,
+): Promise<DetectionReview> {
+  const { data } = await api.get<DetectionReview>(
+    `/projects/${projectId}/lines/${lineId}/review`,
+  );
+  return data;
+}
+
+export async function listPricing(): Promise<PricingItem[]> {
+  const { data } = await api.get<PricingItem[]>('/pricing');
+  return data;
+}
+
+export async function updatePricingItem(
+  itemId: string,
+  payload: PricingItemUpdate,
+): Promise<PricingItem> {
+  const { data } = await api.patch<PricingItem>(`/pricing/${itemId}`, payload);
+  return data;
+}
+
+export async function createPricingItem(
+  payload: PricingItemUpdate & {
+    mfg: string;
+    part_number: string;
+    display_name: string;
+    unit_cost: number;
+  },
+): Promise<PricingItem> {
+  const { data } = await api.post<PricingItem>('/pricing', payload);
+  return data;
 }

@@ -33,6 +33,9 @@ hvac-cost-estimator/backend/storage/*
 # Keep generated requirement PDFs in the repo
 !hvac-cost-estimator/backend/storage/requirements/
 !hvac-cost-estimator/backend/storage/requirements/**
+# Keep generated technical symbol PDFs in the repo
+!hvac-cost-estimator/backend/storage/technical_symbols/
+!hvac-cost-estimator/backend/storage/technical_symbols/**
 hvac-cost-estimator/backend/models/*
 !hvac-cost-estimator/backend/models/.gitkeep
 mlruns/
@@ -55,3 +58,6 @@ _*.png
 _*.pdf
 backend/storage/_*.png
 backend/storage/_*.pdf
+# Generated symbol crop previews (debug only)
+hvac-cost-estimator/backend/storage/technical_symbols/_preview/
+hvac-cost-estimator/backend/storage/technical_symbols/_preview2/

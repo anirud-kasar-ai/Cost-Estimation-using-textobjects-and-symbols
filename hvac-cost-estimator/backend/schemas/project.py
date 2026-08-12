@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from db.models import ProjectStatus
 
@@ -34,6 +34,36 @@ class DeviceLineOut(BaseModel):
     default_unit_cost: float
     needs_review: bool
     line_total: float
+    category: str = "Uncategorized"
+    unit: str = "EA"
+    mfg: str | None = None
+    part_number: str | None = None
+    locations: str | None = None
+    sample_detection_id: str | None = None
+
+    @field_validator("category", "unit", mode="before")
+    @classmethod
+    def _defaults(cls, value: object, info) -> object:  # type: ignore[no-untyped-def]
+        if value is None or value == "":
+            return "Uncategorized" if info.field_name == "category" else "EA"
+        return value
+
+
+class DetectionReviewOut(BaseModel):
+    """Payload for the human review view (line → sheet crop)."""
+
+    detection_id: str
+    device_line_id: str | None = None
+    page_number: int
+    device_type: str
+    confidence: float
+    room_label: str | None = None
+    quantity: float
+    unit: str
+    bbox: tuple[float, float, float, float]
+    crop_url: str
+    page_image_url: str | None = None
+    needs_review: bool = False
 
 
 class ProjectSummary(BaseModel):
@@ -59,6 +89,7 @@ class ProjectDetail(ProjectSummary):
     has_requirement_pdf: bool = False
     requirement_provider: str | None = None
     pages_truncated: bool = False
+    has_technical_symbol_pdf: bool = False
 
 
 # Generous sanity caps for manual overrides; mirrored in the frontend

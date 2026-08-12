@@ -20,6 +20,8 @@ backend/storage/*
 !backend/storage/.gitkeep
 !backend/storage/requirements/
 !backend/storage/requirements/**
+!backend/storage/technical_symbols/
+!backend/storage/technical_symbols/**
 *.db
 *.sqlite3
 

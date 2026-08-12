@@ -17,7 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.routes import projects, reports, upload
+from api.routes import pricing, projects, reports, upload
 from config import get_settings
 from db.session import init_db
 
@@ -75,6 +75,7 @@ async def handle_validation_error(_request: Request, exc: RequestValidationError
 app.include_router(upload.router)
 app.include_router(projects.router)
 app.include_router(reports.router)
+app.include_router(pricing.router)
 
 
 @app.get("/api/health", tags=["health"])

@@ -7,8 +7,10 @@ import { errorMessage } from './api/client';
 import { CostingReportTable } from './components/CostingReportTable';
 import { ExportButton } from './components/ExportButton';
 import { MetadataPanel } from './components/MetadataPanel';
+import { PricingPanel } from './components/PricingPanel';
 import { ProjectList } from './components/ProjectList';
 import { RequirementPanel } from './components/RequirementPanel';
+import { TechnicalSymbolPanel } from './components/TechnicalSymbolPanel';
 import { UploadZone } from './components/UploadZone';
 import {
   useDeleteProject,
@@ -60,6 +62,7 @@ export default function App() {
               onDelete={(projectId) => deleteProject.mutate(projectId)}
             />
           </section>
+          <PricingPanel />
         </aside>
 
         <section className="space-y-6">
@@ -117,8 +120,14 @@ function ProjectReport({ detailId }: { detailId: string }) {
         hasRequirementPdf={detail.has_requirement_pdf}
         pagesTruncated={detail.pages_truncated}
       />
+      <TechnicalSymbolPanel
+        projectId={detail.id}
+        filename={detail.filename}
+        hasTechnicalSymbolPdf={detail.has_technical_symbol_pdf}
+      />
       <MetadataPanel metadata={detail.metadata} />
       <CostingReportTable
+        projectId={detail.id}
         lines={detail.device_lines}
         currency={detail.currency}
         grandTotal={detail.grand_total}

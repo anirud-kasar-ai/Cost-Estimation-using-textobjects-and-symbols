@@ -18,6 +18,12 @@ const LINES: DeviceLine[] = [
     default_unit_cost: 185,
     needs_review: false,
     line_total: 1110,
+    category: 'Diffusers & Grilles',
+    unit: 'EA',
+    mfg: 'Titus',
+    part_number: 'TMS-AA',
+    locations: 'ROOM 101',
+    sample_detection_id: 'det-1',
   },
   {
     id: 'line-2',
@@ -29,12 +35,19 @@ const LINES: DeviceLine[] = [
     default_unit_cost: 100,
     needs_review: true,
     line_total: 300,
+    category: 'Uncategorized',
+    unit: 'EA',
+    mfg: null,
+    part_number: null,
+    locations: null,
+    sample_detection_id: null,
   },
 ];
 
 function renderTable(onUpdateLine = vi.fn()) {
   render(
     <CostingReportTable
+      projectId="proj-1"
       lines={LINES}
       currency="USD"
       grandTotal={1410}

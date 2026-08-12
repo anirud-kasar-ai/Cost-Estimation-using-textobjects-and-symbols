@@ -58,6 +58,11 @@ def _build_report(project: Project, settings: Settings) -> CostingReport:
                 unit_cost=line.unit_cost,
                 line_total=line.line_total,
                 needs_review=line.needs_review,
+                category=line.category,
+                unit=line.unit,
+                mfg=line.mfg,
+                part_number=line.part_number,
+                locations=line.locations,
             )
             for line in detail.device_lines
         ],
@@ -101,13 +106,35 @@ def export_report_csv(
         writer.writerow([label, metadata.get(key) or ""])
 
     writer.writerow([])
-    writer.writerow(["Device", "Count", f"Unit Cost ({report.currency})", "Total Cost"])
+    writer.writerow(
+        [
+            "Category",
+            "Device",
+            "Mfg",
+            "Part #",
+            "Unit",
+            "Qty",
+            f"Unit Cost ({report.currency})",
+            "Total Cost",
+            "Locations",
+        ]
+    )
     for line in report.lines:
         writer.writerow(
-            [line.display_name, line.count, f"{line.unit_cost:.2f}", f"{line.line_total:.2f}"]
+            [
+                line.category,
+                line.display_name,
+                line.mfg or "",
+                line.part_number or "",
+                line.unit,
+                line.count,
+                f"{line.unit_cost:.2f}",
+                f"{line.line_total:.2f}",
+                line.locations or "",
+            ]
         )
     writer.writerow([])
-    writer.writerow(["Grand Total", "", "", f"{report.grand_total:.2f}"])
+    writer.writerow(["Grand Total", "", "", "", "", "", "", f"{report.grand_total:.2f}", ""])
 
     buffer.seek(0)
     safe_name = project.filename.rsplit(".", 1)[0] or "report"

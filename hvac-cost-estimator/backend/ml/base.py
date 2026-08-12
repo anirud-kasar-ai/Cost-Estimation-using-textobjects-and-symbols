@@ -59,12 +59,24 @@ class OcrLine:
 
 @dataclass(frozen=True)
 class ClassifiedDevice:
-    """A detected symbol assigned to a device type by the classifier."""
+    """A detected symbol assigned to a device type by the classifier.
+
+    Detection+classification carries the sheet bounding box (via ``detection``),
+    optional crop path for human review, room location from nearby OCR, and
+    quantity/unit (EA or linear feet after scale calibration).
+    """
 
     device_type: str
     confidence: float
     detection: Detection
     page_number: int = 1
+    room_label: str | None = None
+    quantity: float = 1.0
+    unit: str = "EA"  # EA | LF
+    crop_path: str | None = None
+    mfg: str | None = None
+    part_number: str | None = None
+    category: str | None = None
 
 
 @dataclass

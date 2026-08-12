@@ -41,7 +41,10 @@ class MockOcrEngine:
         "DRAWING NO",
         "M-301",
         "SCALE",
-        "1:100",
+        '1/8" = 1\'-0"',
+        "ROOM 101",
+        "CORRIDOR A",
+        "MECH 1",
     )
 
     def extract(self, image: Image.Image) -> list[OcrLine]:

@@ -28,7 +28,8 @@ class TestMockSymbolDetector:
             assert detection.box.x2 <= image.width * MockSymbolDetector.DRAWING_AREA_FRACTION
             assert 0 <= detection.box.y1 < detection.box.y2 <= image.height
             assert 0.0 < detection.score <= 1.0
-            assert detection.label == "device_symbol"
+            assert detection.label in {"device_symbol", "raceway"}
+        assert any(d.label == "raceway" for d in detections)
 
     def test_deterministic_for_same_image(self) -> None:
         image = _noise_image(seed=42)

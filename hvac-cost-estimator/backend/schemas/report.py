@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from schemas.project import ProjectMetadata
 
@@ -14,6 +14,11 @@ class ReportLine(BaseModel):
     unit_cost: float
     line_total: float
     needs_review: bool
+    category: str = "Uncategorized"
+    unit: str = "EA"
+    mfg: str | None = None
+    part_number: str | None = None
+    locations: str | None = None
 
 
 class CostingReport(BaseModel):

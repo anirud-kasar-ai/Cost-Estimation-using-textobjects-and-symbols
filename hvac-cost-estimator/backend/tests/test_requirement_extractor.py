@@ -635,6 +635,57 @@ class TestLogoFirmExtraction:
         assert info.provider_phone == "(408) 715-4470"
 
 
+class TestShadelandStyleScope:
+    """CAD sheets often put SCOPE OF WORK after the numbered list, and wrap
+    long bullets that mention 'district' mid-sentence (not title-block chrome).
+    """
+
+    SHADELAND_SCOPE_PAGE = """
+1. REMOVE AND DISPOSE OF ALL ROOFING, EDGE METAL, AND COUNTER-FLASHING DOWN TO STRUCTURAL DECK. ANY GUTTERS TO BE REMOVED AND REPLACED.
+2. PERFORM ANY REPAIRS AS NEEDED.
+3. NAIL RED ROSIN PAPER.
+4. MECHANICALLY FASTEN 1/2" WOOD FIBER BOARD PER MANUFACTURERS WIND UPLIFT CALCULATIONS.
+5. RAISE ALL CURBS WITH NEW NAILERS TO PROVIDE A MINIMUM 8" BASE FLASHING HEIGHT.
+6. INSTALL 2 PLY MODIFIED BITUMEN SYSTEM IN HOT APPLIED ASPHALT.
+7. INSTALL NEW KYNAR COATED EDGE METAL AND COUNTERFLASHING.
+8. ON BUILDINGS (INDICATED WITH R) APPLY TITLE 24 REFLECTIVE COATING IN 2 COATS, (1.5+1.5 GAL PER SQUARE). ON WALKWAY/LOWER ROOFS INSTALL GARLA-BLOCK 2K PRIMER AT 0.5 GALLONS PER SQUARE AND APPLY GREEN-LOCK WHITE AT 4.5 GALLONS PER SQUARE. IMMEDIATELY BROADCAST TITLE 24 APPROVED 3/8" ROCK AT 200 LBS PER SQUARE (INDICATED WITH W).
+9. CLEAN OFF ALL MASTIC/ASPHALT AND PAINT ALL CONDUIT PIPES, VENTS, AND HOODS WITH PYRAMIC TO ENSURE A CLEAN FINAL PROJECT. ALL CONDUIT TO BE SEALED AND REATTACHED WITH PROPER COUPLINGS. LINES SHOULD BE STRAIGHT AND AS TIDY AS POSSIBLE. ANY COUPLINGS THAT CANNOT BE PROPERLY SEALED SHOULD BE BROUGHT TO DISTRICT ATTENTION.
+10. ALL DRAINS AND GUTTER DOWNSPOUTS TO RECEIVE NEW STRAINERS.
+11. AT END OF EVERY WORK DAY ENSURE THE WORK SITE AND SURROUNDING AREA IS FREE OF ANY DIRT AND DEBRIS.
+12. TEST ALL DRAINS AND DOWNSPOUT PRIOR TO CONSTRUCTION AND ONCE AGAIN AFTER COMPLETION.
+SCOPE OF WORK:
+ROOF REPLACEMENT SCOPE -
+THE GARLAND COMPANY INC
+Mt. Diablo Unified School District
+"""
+
+    def test_scope_list_above_heading_keeps_all_twelve(self) -> None:
+        info = extract_requirement([PageText(3, self.SHADELAND_SCOPE_PAGE)])
+        assert len(info.scope_sections) >= 1
+        items = [item for section in info.scope_sections for item in section.items]
+        assert len(items) == 12
+        assert any("STRAINERS" in item.upper() for item in items)
+        assert any("WORK DAY" in item.upper() for item in items)
+        assert any("DOWNSPOUT" in item.upper() and "TEST" in item.upper() for item in items)
+        assert any("DISTRICT ATTENTION" in item.upper() for item in items)
+
+    def test_real_shadeland_pdf_if_present(self) -> None:
+        pdf = Path(
+            r"D:\Cost Estimation Using Text and Object\Real data"
+            r"\1952BIDDrawings-Shadeland-Sunrise010625.pdf"
+        )
+        if not pdf.exists():
+            return
+        info = extract_requirement_from_pdf(pdf)
+        assert info.scope_sections
+        assert any("ROOF REPLACEMENT" in s.title.upper() for s in info.scope_sections)
+        total = sum(len(s.items) for s in info.scope_sections)
+        assert total >= 12
+        blob = " ".join(item.upper() for s in info.scope_sections for item in s.items)
+        assert "STRAINERS" in blob
+        assert "WORK DAY" in blob
+
+
 class TestExtractFromSamplePdf:
     def test_sample_layout_has_scope(self, sample_pdf: Path) -> None:
         info = extract_requirement_from_pdf(sample_pdf)

@@ -8,6 +8,7 @@
     "co2_sensor": { "display_name": "CO2 Sensor", "unit_cost": 320.0 },
     "temperature_sensor": { "display_name": "Temperature Sensor", "unit_cost": 210.0 },
     "thermostat": { "display_name": "Thermostat", "unit_cost": 265.0 },
-    "vav_box": { "display_name": "VAV Box", "unit_cost": 850.0 }
+    "vav_box": { "display_name": "VAV Box", "unit_cost": 850.0 },
+    "raceway": { "display_name": "Raceway / Conduit", "unit_cost": 12.5 }
   }
 }

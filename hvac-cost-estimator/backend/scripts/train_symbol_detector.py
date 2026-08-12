@@ -4,11 +4,10 @@ STATUS: stub - training requires annotated data that does not exist yet.
 
 Required inputs (place under ml-training/data/symbols/):
     images/                     page PNGs exported by ml/pdf_to_image.py
-    annotations.json            COCO-format boxes. Either a single generic
-                                "device_symbol" category (detector proposes,
-                                classifier decides the sub-type - matches the
-                                current pipeline design), or one category per
-                                device type if you prefer a single-stage model.
+    annotations.json            COCO-format boxes (see annotations.template.json
+                                and README.md). Annotate Mt. Diablo / MHES plan
+                                sheets with in-place symbol boxes + raceway spans,
+                                not legend crops alone.
 
 Once data exists: fine-tune a COCO-pretrained Faster R-CNN, log to MLflow
 (./mlruns), and write weights + config to

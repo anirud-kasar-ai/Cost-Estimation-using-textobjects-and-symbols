@@ -135,7 +135,8 @@ SKIP_LINES = re.compile(
 )
 
 SCOPE_HEADING_RE = re.compile(
-    r"^(?:SHT\s+\d+\s*[-–]?\s*)?(.+?\s+)?SCOPE(?:\s+OF\s+WORK)?(?:\s*:.*)?$",
+    r"^(?:SHT\s+\d+\s*[-–]?\s*)?(.+?\s+)?SCOPE(?:\s+OF\s+WORK)?"
+    r"(?:\s*[:\-].*)?$",
     re.IGNORECASE,
 )
 SCOPE_FALLBACK_RE = re.compile(
@@ -1892,8 +1893,9 @@ _SCOPE_TITLEBLOCK_JUNK_RE = re.compile(
 _SCOPE_WORK_VERB_RE = re.compile(
     r"\b(REMOVE|DISPOSE|INSTALL|NAIL|FASTEN|PERFORM|APPLY|CLEAN|TEST|ENSURE|"
     r"REPLACE|PROVIDE|PATCH|PAINT|POWER\s+WASH|MECHANICALLY|FLOOD\s+COAT|"
-    r"RECEIVE|COORDINATE|DEMOLISH|SEAL|PRIME|SAND|REPAIR|ESTABLISH|FURNISH|"
-    r"COMPLY|REVIEW|HOLD|SLEEVED|PROHIBITED|RE-?CABLE|CUTOVER)\b",
+    r"RECEIVE|COORDINATE|DEMOLISH|SEAL(?:ED|ING)?|PRIME|SAND|REPAIR|ESTABLISH|FURNISH|"
+    r"COMPLY|REVIEW|HOLD|SLEEVED|PROHIBITED|RE-?CABLE|CUTOVER|RAISE|BROADCAST|"
+    r"REATTACH(?:ED)?)\b",
     re.IGNORECASE,
 )
 
@@ -2049,7 +2051,10 @@ def _trim_scope_body_window(lines: list[str], *, max_lines: int = 90) -> list[st
             continue
         # Continuation / body under current number.
         if _is_titleblock_scope_junk(line) or SKIP_LINES.match(line):
-            break
+            # Long wrapped scope sentences may mention "district" / "agent" —
+            # only cut on short stamp-like chrome.
+            if len(line) <= 60:
+                break
         out.append(line)
     return out
 
@@ -2226,15 +2231,27 @@ def _extract_scope_sections(pages: list[PageText]) -> list[ScopeSection]:
                 # often extracted ABOVE the heading. Prefer that primary 1..N list
                 # exactly — do not merge later sub-lists (PRE-CON / standards) that
                 # restart at 1. under the same title block.
+                #
+                # Garland roof sheets put ``SCOPE OF WORK:`` *after* the bullets in
+                # text order; still harvest the trailing 1..N work list above it.
                 above_items: list[str] = []
-                if position == 0 and not _is_generic_scope_title(title):
+                if position == 0 or (
+                    _is_generic_scope_title(title) and not after_items and not prose_after
+                ):
                     above_start = max(0, heading_index - 140)
                     above_block = _trailing_numbered_block(
                         lines[above_start:heading_index]
                     )
-                    above_items = _filter_quality_scope_items(
+                    candidate_above = _filter_quality_scope_items(
                         _collect_numbered_items(above_block, stop_at_heading=False)
                     )
+                    # Generic headings only accept a strong work-verb list so we
+                    # do not steal SYMBOL LEGEND rows sitting higher on the page.
+                    if _is_generic_scope_title(title):
+                        if _score_scope_items(candidate_above) >= 6:
+                            above_items = candidate_above
+                    elif not _is_generic_scope_title(title):
+                        above_items = candidate_above
 
                 candidates: list[list[str]] = [after_items, prose_after]
                 if above_items:

@@ -98,6 +98,11 @@ class Settings(BaseSettings):
         """Folder for generated ``<name> requirement.pdf`` files."""
         return self.storage_dir / "requirements"
 
+    @property
+    def technical_symbols_dir(self) -> Path:
+        """Folder for generated ``<name> technical symbol.pdf`` files."""
+        return self.storage_dir / "technical_symbols"
+
 
 @lru_cache
 def get_settings() -> Settings:

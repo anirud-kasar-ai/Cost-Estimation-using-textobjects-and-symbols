@@ -1,0 +1,78 @@
+{
+  "currency": "USD",
+  "default_unit_cost": 100.0,
+  "items": [
+    {
+      "mfg": "Titus",
+      "part_number": "TMS-AA",
+      "display_name": "Supply Air Diffuser",
+      "category": "Diffusers & Grilles",
+      "unit": "EA",
+      "unit_cost": 185.0,
+      "device_type": "supply_air_diffuser"
+    },
+    {
+      "mfg": "Titus",
+      "part_number": "3FCD",
+      "display_name": "Return Air Grille",
+      "category": "Diffusers & Grilles",
+      "unit": "EA",
+      "unit_cost": 140.0,
+      "device_type": "return_air_grille"
+    },
+    {
+      "mfg": "Titus",
+      "part_number": "EXG-200",
+      "display_name": "Exhaust Grille",
+      "category": "Diffusers & Grilles",
+      "unit": "EA",
+      "unit_cost": 160.0,
+      "device_type": "exhaust_grille"
+    },
+    {
+      "mfg": "Veris",
+      "part_number": "CWL",
+      "display_name": "CO2 Sensor",
+      "category": "Controls & Sensors",
+      "unit": "EA",
+      "unit_cost": 320.0,
+      "device_type": "co2_sensor"
+    },
+    {
+      "mfg": "Belimo",
+      "part_number": "22DTH-56",
+      "display_name": "Temperature Sensor",
+      "category": "Controls & Sensors",
+      "unit": "EA",
+      "unit_cost": 210.0,
+      "device_type": "temperature_sensor"
+    },
+    {
+      "mfg": "Honeywell",
+      "part_number": "T7350",
+      "display_name": "Thermostat",
+      "category": "Controls & Sensors",
+      "unit": "EA",
+      "unit_cost": 265.0,
+      "device_type": "thermostat"
+    },
+    {
+      "mfg": "Price",
+      "part_number": "SDV",
+      "display_name": "VAV Box",
+      "category": "Terminal Units",
+      "unit": "EA",
+      "unit_cost": 850.0,
+      "device_type": "vav_box"
+    },
+    {
+      "mfg": "Generic",
+      "part_number": "EMT-3/4",
+      "display_name": "Raceway / Conduit",
+      "category": "Raceway",
+      "unit": "LF",
+      "unit_cost": 12.5,
+      "device_type": "raceway"
+    }
+  ]
+}

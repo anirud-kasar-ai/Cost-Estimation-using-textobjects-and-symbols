@@ -12,11 +12,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from config import Settings, get_settings
-from db.models import DeviceLine, Project
+from db.models import DetectionInstance, DeviceLine, Project
 from db.session import get_db
 from ml.cost_calculator import load_cost_rates
 from ml.requirement_pdf import requirement_pdf_filename
+from ml.symbol_table_pdf import technical_symbol_pdf_filename
 from schemas.project import (
+    DetectionReviewOut,
     DeviceLineOut,
     DeviceLineUpdate,
     ProjectDetail,
@@ -49,6 +51,7 @@ def build_project_detail(project: Project, settings: Settings) -> ProjectDetail:
 
     lines = [DeviceLineOut.model_validate(line) for line in project.device_lines]
     req_path = project.requirement_pdf_path
+    sym_path = project.technical_symbol_pdf_path
     return ProjectDetail(
         id=project.id,
         filename=project.filename,
@@ -70,6 +73,7 @@ def build_project_detail(project: Project, settings: Settings) -> ProjectDetail:
         has_requirement_pdf=bool(req_path and Path(req_path).exists()),
         requirement_provider=project.requirement_provider,
         pages_truncated=bool(project.pages_truncated),
+        has_technical_symbol_pdf=bool(sym_path and Path(sym_path).exists()),
     )
 
 
@@ -135,6 +139,36 @@ def download_requirement_pdf(
     )
 
 
+@router.get(
+    "/{project_id}/technical-symbol.pdf",
+    summary="Download the extracted technical symbol PDF",
+    response_class=FileResponse,
+)
+def download_technical_symbol_pdf(
+    project_id: str,
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    project = _get_project_or_404(db, project_id)
+    if not project.technical_symbol_pdf_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No technical symbol PDF is available for this project.",
+        )
+    path = Path(project.technical_symbol_pdf_path)
+    if not path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Technical symbol PDF file is missing on disk.",
+        )
+    download_name = technical_symbol_pdf_filename(project.filename)
+    return FileResponse(
+        path,
+        media_type="application/pdf",
+        filename=download_name,
+        content_disposition_type="attachment",
+    )
+
+
 @router.patch(
     "/{project_id}/lines/{line_id}",
     response_model=ProjectDetail,
@@ -162,3 +196,105 @@ def update_device_line(
     db.commit()
     db.refresh(project)
     return build_project_detail(project, settings)
+
+
+def _detection_for_line(db: Session, project: Project, line: DeviceLine) -> DetectionInstance:
+    if line.sample_detection_id:
+        det = db.get(DetectionInstance, line.sample_detection_id)
+        if det is not None and det.project_id == project.id:
+            return det
+    det = next(
+        (d for d in project.detections if d.device_line_id == line.id),
+        None,
+    )
+    if det is None:
+        det = next(
+            (d for d in project.detections if d.device_type == line.device_type),
+            None,
+        )
+    if det is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No detection crop is available for this line item.",
+        )
+    return det
+
+
+@router.get(
+    "/{project_id}/lines/{line_id}/review",
+    response_model=DetectionReviewOut,
+    summary="Review payload: sheet crop for a costing line item",
+)
+def review_device_line(
+    project_id: str,
+    line_id: str,
+    db: Session = Depends(get_db),
+) -> DetectionReviewOut:
+    project = _get_project_or_404(db, project_id)
+    line = db.get(DeviceLine, line_id)
+    if line is None or line.project_id != project.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Device line {line_id} not found on project {project_id}.",
+        )
+    det = _detection_for_line(db, project, line)
+    page = next((p for p in project.pages if p.page_number == det.page_number), None)
+    return DetectionReviewOut(
+        detection_id=det.id,
+        device_line_id=line.id,
+        page_number=det.page_number,
+        device_type=det.device_type,
+        confidence=det.confidence,
+        room_label=det.room_label,
+        quantity=det.quantity,
+        unit=det.unit,
+        bbox=(det.x1, det.y1, det.x2, det.y2),
+        crop_url=f"/api/projects/{project.id}/detections/{det.id}/crop",
+        page_image_url=(
+            f"/api/projects/{project.id}/pages/{page.page_number}/image"
+            if page is not None
+            else None
+        ),
+        needs_review=det.needs_review or line.needs_review,
+    )
+
+
+@router.get(
+    "/{project_id}/detections/{detection_id}/crop",
+    summary="PNG crop for a single detection (review view)",
+    response_class=FileResponse,
+)
+def download_detection_crop(
+    project_id: str,
+    detection_id: str,
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    project = _get_project_or_404(db, project_id)
+    det = db.get(DetectionInstance, detection_id)
+    if det is None or det.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Detection not found.")
+    if not det.crop_path or not Path(det.crop_path).exists():
+        raise HTTPException(status_code=404, detail="Detection crop file is missing.")
+    return FileResponse(
+        Path(det.crop_path),
+        media_type="image/png",
+        filename=f"{detection_id}.png",
+    )
+
+
+@router.get(
+    "/{project_id}/pages/{page_number}/image",
+    summary="Full rendered page image",
+    response_class=FileResponse,
+)
+def download_page_image(
+    project_id: str,
+    page_number: int,
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    project = _get_project_or_404(db, project_id)
+    page = next((p for p in project.pages if p.page_number == page_number), None)
+    if page is None or not Path(page.image_path).exists():
+        raise HTTPException(status_code=404, detail="Page image not found.")
+    return FileResponse(Path(page.image_path), media_type="image/png")
+

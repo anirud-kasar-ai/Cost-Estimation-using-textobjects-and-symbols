@@ -25,6 +25,7 @@ DEVICE_TYPES: tuple[str, ...] = (
     "temperature_sensor",
     "thermostat",
     "vav_box",
+    "raceway",
 )
 
 

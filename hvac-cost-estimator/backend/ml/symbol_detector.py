@@ -42,17 +42,28 @@ class MockSymbolDetector:
         max_x = width * self.DRAWING_AREA_FRACTION
 
         detections: list[Detection] = []
-        for _ in range(count):
+        for i in range(count):
             # Vary box size so crops differ even over blank drawing regions,
             # which spreads the mock classifier's output across device types.
-            symbol_size = max(20.0, width * rng.uniform(0.012, 0.022))
-            x1 = rng.uniform(0.05 * width, max_x - symbol_size)
-            y1 = rng.uniform(0.05 * height, 0.95 * height - symbol_size)
+            # Every ~6th detection is an elongated raceway span for LF takeoff.
+            if i % 6 == 0:
+                length = max(80.0, width * rng.uniform(0.08, 0.18))
+                thickness = max(8.0, height * rng.uniform(0.004, 0.008))
+                x1 = rng.uniform(0.05 * width, max(0.06 * width, max_x - length))
+                y1 = rng.uniform(0.08 * height, 0.90 * height - thickness)
+                box = BoundingBox(x1=x1, y1=y1, x2=x1 + length, y2=y1 + thickness)
+                label = "raceway"
+            else:
+                symbol_size = max(20.0, width * rng.uniform(0.012, 0.022))
+                x1 = rng.uniform(0.05 * width, max_x - symbol_size)
+                y1 = rng.uniform(0.05 * height, 0.95 * height - symbol_size)
+                box = BoundingBox(x1=x1, y1=y1, x2=x1 + symbol_size, y2=y1 + symbol_size)
+                label = "device_symbol"
             detections.append(
                 Detection(
-                    box=BoundingBox(x1=x1, y1=y1, x2=x1 + symbol_size, y2=y1 + symbol_size),
+                    box=box,
                     score=round(rng.uniform(0.75, 0.99), 3),
-                    label="device_symbol",
+                    label=label,
                 )
             )
         return detections

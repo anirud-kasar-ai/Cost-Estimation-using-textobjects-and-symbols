@@ -2,6 +2,7 @@
  *
  * Count and unit cost are editable; edits are committed on blur/Enter and
  * PATCHed to the backend, which recalculates totals server-side.
+ * Click a device name to open the sheet-crop review view.
  */
 
 import {
@@ -13,6 +14,7 @@ import {
 import { useMemo, useState } from 'react';
 
 import type { DeviceLine, DeviceLineUpdate } from '../types';
+import { LineReviewModal } from './LineReviewModal';
 
 // Sanity caps mirroring the backend validation (backend/schemas/project.py).
 export const MAX_LINE_COUNT = 100_000;
@@ -68,6 +70,7 @@ function EditableNumberCell({
 }
 
 interface CostingReportTableProps {
+  projectId: string;
   lines: DeviceLine[];
   currency: string;
   grandTotal: number;
@@ -75,30 +78,57 @@ interface CostingReportTableProps {
 }
 
 export function CostingReportTable({
+  projectId,
   lines,
   currency,
   grandTotal,
   onUpdateLine,
 }: CostingReportTableProps) {
+  const [reviewLine, setReviewLine] = useState<DeviceLine | null>(null);
   const columnHelper = createColumnHelper<DeviceLine>();
 
   const columns = useMemo(
     () => [
-      columnHelper.accessor('display_name', {
-        header: 'Device',
+      columnHelper.accessor('category', {
+        header: 'Category',
         cell: (info) => (
-          <div className="flex items-center gap-2">
-            <span className="font-medium text-slate-800">{info.getValue()}</span>
-            {info.row.original.needs_review && (
-              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                needs review
-              </span>
-            )}
-          </div>
+          <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            {info.getValue() || 'Uncategorized'}
+          </span>
         ),
       }),
+      columnHelper.accessor('display_name', {
+        header: 'Device',
+        cell: (info) => {
+          const line = info.row.original;
+          return (
+            <div>
+              <button
+                type="button"
+                onClick={() => setReviewLine(line)}
+                className="text-left font-medium text-sky-700 hover:underline"
+              >
+                {info.getValue()}
+              </button>
+              <div className="mt-0.5 text-xs text-slate-400">
+                {[line.mfg, line.part_number].filter(Boolean).join(' / ') || line.device_type}
+                {line.locations ? ` · ${line.locations}` : ''}
+              </div>
+              {line.needs_review && (
+                <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  needs review
+                </span>
+              )}
+            </div>
+          );
+        },
+      }),
+      columnHelper.accessor('unit', {
+        header: 'Unit',
+        cell: (info) => <span className="text-slate-500">{info.getValue() || 'EA'}</span>,
+      }),
       columnHelper.accessor('count', {
-        header: () => <span className="block text-right">Count</span>,
+        header: () => <span className="block text-right">Qty</span>,
         cell: (info) => {
           const line = info.row.original;
           return (
@@ -172,6 +202,9 @@ export function CostingReportTable({
       <h2 className="border-b border-slate-100 px-5 py-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
         Detailed Costing Report
       </h2>
+      <p className="border-b border-slate-50 px-5 py-2 text-xs text-slate-400">
+        Click a device name to open the sheet crop for human verification.
+      </p>
       <table className="w-full text-sm">
         <thead>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -190,7 +223,7 @@ export function CostingReportTable({
         <tbody>
           {table.getRowModel().rows.length === 0 ? (
             <tr>
-              <td colSpan={4} className="px-5 py-8 text-center italic text-slate-400">
+              <td colSpan={6} className="px-5 py-8 text-center italic text-slate-400">
                 No devices detected.
               </td>
             </tr>
@@ -208,7 +241,7 @@ export function CostingReportTable({
         </tbody>
         <tfoot>
           <tr className="bg-amber-50">
-            <td className="px-5 py-4 font-semibold text-slate-700" colSpan={3}>
+            <td className="px-5 py-4 font-semibold text-slate-700" colSpan={5}>
               Grand Total
             </td>
             <td className="px-5 py-4 text-right text-base font-bold text-slate-900">
@@ -217,6 +250,13 @@ export function CostingReportTable({
           </tr>
         </tfoot>
       </table>
+      {reviewLine && (
+        <LineReviewModal
+          projectId={projectId}
+          line={reviewLine}
+          onClose={() => setReviewLine(null)}
+        />
+      )}
     </section>
   );
 }
