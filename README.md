@@ -6,7 +6,12 @@ Local proof-of-concept that turns HVAC / construction bid drawing PDFs into:
 2. **Title-block metadata** — client, architect, engineer, address, dates (ROI + OCR + fuzzy mapping).
 3. **Device symbol costing** — detect / classify HVAC symbols, count them, and produce an editable cost report.
 
-The runnable application lives in [`hvac-cost-estimator/`](hvac-cost-estimator/).
+The full HVAC dashboard lives in [`hvac-cost-estimator/`](hvac-cost-estimator/). Two standalone drawing tools (zoom export + symbol count) are also in this repo:
+
+| Folder | Role | Setup |
+|--------|------|--------|
+| [`dual-pathway-drawing-split/`](dual-pathway-drawing-split/) | PDF → wing crops + 653px zoom tiles | [SETUP](dual-pathway-drawing-split/SETUP.md) |
+| [`symbol-count-vision/`](symbol-count-vision/) | Count legend symbols on tiles / zoom folders | [SETUP](symbol-count-vision/SETUP.md) |
 
 ## Stack
 
@@ -15,11 +20,15 @@ The runnable application lives in [`hvac-cost-estimator/`](hvac-cost-estimator/)
 | API | FastAPI + SQLite |
 | ML pipeline | Mock models by default; optional Detectron2 / **PaddleOCR** / ONNX |
 | Requirement extract | PyMuPDF text + heuristics (+ logo stamp map / PaddleOCR when mock is off) |
-| UI | React + Vite + Tailwind |
+| Drawing split / zooms | OpenCV + Groq (or HF) vision |
+| Symbol count | Tesseract + OpenCV + optional Gemini/Groq vision |
+| UI | React + Vite + Tailwind (HVAC app); lightweight FastAPI UIs for the two tools above |
 
 ## Quick start
 
-See **[SETUP.md](SETUP.md)** for full Windows / macOS / Linux steps.
+See **[SETUP.md](SETUP.md)** for full Windows / macOS / Linux steps (HVAC app + the two drawing folders).
+
+### HVAC cost estimator
 
 ```bash
 cd hvac-cost-estimator
@@ -42,7 +51,23 @@ cd frontend && npm run dev
 - Dashboard: http://localhost:5173  
 - API docs: http://localhost:8000/docs  
 
-**Never commit `.env`.** Use `.env.example` as the template.
+### Drawing split + symbol count
+
+```bash
+# 1) Export zooms from a bid PDF
+cd dual-pathway-drawing-split
+copy .env.example .env   # set GROQ_API_KEY
+pip install -r requirements.txt
+python scripts/run_batch.py --input "path\to\pdfs"
+
+# 2) Count symbols on a zoom folder or single tile
+cd ../symbol-count-vision
+copy .env.example .env   # set GEMINI_API_KEY or GROQ_API_KEY
+pip install -r requirements.txt
+uvicorn app:app --host 127.0.0.1 --port 8767
+```
+
+**Never commit `.env`.** Use each folder’s `.env.example` as the template. API keys are gitignored at the repo root and in both tool folders.
 
 ## Repository layout
 
@@ -50,6 +75,8 @@ cd frontend && npm run dev
 ├── README.md
 ├── SETUP.md
 ├── .gitignore
+├── dual-pathway-drawing-split/   # PDF → wings + zoom tiles
+├── symbol-count-vision/          # Legend symbol counting UI
 └── hvac-cost-estimator/
     ├── backend/          # FastAPI, ML pipeline, requirement extractor
     ├── frontend/         # React dashboard

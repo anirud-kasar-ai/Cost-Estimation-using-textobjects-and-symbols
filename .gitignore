@@ -4,6 +4,18 @@
 !.env.example
 **/.env
 **/.env.local
+**/.env.*.local
+*.pem
+*credentials*.json
+**/secrets/
+
+# Standalone tool job outputs (large; may contain user uploads)
+dual-pathway-drawing-split/storage/jobs/
+dual-pathway-drawing-split/storage/extraction_cache/
+dual-pathway-drawing-split/storage/requirements/
+dual-pathway-drawing-split/storage/technical_symbols/
+symbol-count-vision/storage/jobs/
+symbol-count-vision/storage/_*/
 
 # Python
 __pycache__/

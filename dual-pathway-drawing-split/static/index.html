@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dual-Pathway Drawing Split</title>
+  <style>
+    :root {
+      --ink: #1c2330;
+      --muted: #5c6778;
+      --line: #d8deea;
+      --paper: #eef2f8;
+      --card: #fff;
+      --accent: #2563eb;
+      --accent-dark: #1d4ed8;
+      --ok: #2f6f4e;
+      --warn: #8a6d1f;
+      --fail: #a33b3b;
+      --shadow: 0 12px 40px rgba(28, 35, 48, 0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(1200px 500px at 10% -10%, #dbeafe 0%, transparent 55%), var(--paper);
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 28px 36px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(8px);
+    }
+    header h1 { margin: 0; font-size: 22px; font-weight: 650; }
+    header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    header .model { font-size: 12px; color: var(--muted); }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
+    .drop {
+      border: 1.5px dashed #b9c0ce;
+      background: var(--card);
+      border-radius: 14px;
+      padding: 36px 24px;
+      text-align: center;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+    }
+    .drop.drag { border-color: var(--accent); }
+    input[type=file] { display: none; }
+    .status {
+      margin-top: 18px;
+      padding: 14px 16px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      display: none;
+    }
+    .status.show { display: block; }
+    .bar { height: 6px; background: #ece7dc; border-radius: 99px; overflow: hidden; margin: 10px 0 6px; }
+    .bar > i { display: block; height: 100%; width: 18%; background: linear-gradient(90deg, var(--accent), #60a5fa); border-radius: 99px; animation: pulse 1.4s ease-in-out infinite; }
+    .bar.done > i { width: 100%; animation: none; background: var(--ok); }
+    .bar.fail > i { width: 100%; animation: none; background: var(--fail); }
+    @keyframes pulse { 0%,100% { width: 18%; } 50% { width: 72%; } }
+    .meta { font-size: 13px; color: var(--muted); }
+    .btn { border: 0; background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block; }
+    .btn:hover { background: var(--accent-dark); }
+    .page { margin-top: 28px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); }
+    .page h2 { margin: 0 0 6px; font-size: 16px; }
+    .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 99px; margin-left: 8px; }
+    .kept { background: #e5f3ea; color: var(--ok); }
+    .skip { background: #f3ece5; color: var(--warn); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-top: 12px; }
+    figure { margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+    figure img { width: 100%; height: 160px; object-fit: contain; background: #f7f5f0; display: block; }
+    figcaption { padding: 8px 10px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Dual-Pathway Drawing Split</h1>
+      <p>Upload a construction PDF — extract plan pages and split by wing/building.</p>
+    </div>
+    <div class="model" id="health">Checking model…</div>
+  </header>
+  <main>
+    <label class="drop" id="drop">
+      <strong>Drop a PDF or drawing image</strong>
+      <span>Output: one image per wing in 04_wings/{WING-NAME}/</span>
+      <input id="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" />
+    </label>
+    <div class="status" id="status">
+      <div id="statusTitle">Queued</div>
+      <div class="bar" id="bar"><i></i></div>
+      <div class="meta" id="statusMeta"></div>
+      <div class="actions" id="actions"></div>
+    </div>
+    <div id="results"></div>
+  </main>
+  <script>
+    const drop = document.getElementById("drop");
+    const fileInput = document.getElementById("file");
+    const statusEl = document.getElementById("status");
+    const statusTitle = document.getElementById("statusTitle");
+    const statusMeta = document.getElementById("statusMeta");
+    const bar = document.getElementById("bar");
+    const actions = document.getElementById("actions");
+    const results = document.getElementById("results");
+    let pollTimer = null;
+
+    fetch("/api/health").then(r => r.json()).then(h => {
+      const keyOk = h.runtime === "groq" ? h.groq_key_set : h.token_set;
+      document.getElementById("health").textContent =
+        `${h.runtime} · ${keyOk ? "key set" : "set API key in .env"} · ${h.model}`;
+    }).catch(() => { document.getElementById("health").textContent = "API not reachable"; });
+
+    drop.addEventListener("click", () => fileInput.click());
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("drag"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("drag"));
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      drop.classList.remove("drag");
+      if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener("change", () => { if (fileInput.files[0]) upload(fileInput.files[0]); });
+
+    function imgUrl(jobId, rel) { return `/api/jobs/${jobId}/files/${rel}`; }
+    function figure(src, caption) {
+      return `<figure><img src="${src}" alt="${caption}" /><figcaption>${caption}</figcaption></figure>`;
+    }
+
+    function renderJob(job) {
+      statusEl.classList.add("show");
+      statusTitle.textContent = job.message || job.stage || job.status;
+      statusMeta.textContent = `${job.filename || ""} · ${job.status} · ${job.stage || ""}`;
+      bar.classList.remove("done", "fail");
+      if (job.status === "done") bar.classList.add("done");
+      if (job.status === "failed") bar.classList.add("fail");
+      actions.innerHTML = job.status === "done"
+        ? `<a class="btn" href="/api/jobs/${job.id}/zip">Download zip</a>`
+        : "";
+
+      if (!job.pages || !job.pages.length) { results.innerHTML = ""; return; }
+      results.innerHTML = job.pages.map(page => {
+        const badge = page.kept
+          ? `<span class="badge kept">DRAWING</span>`
+          : `<span class="badge skip">SKIPPED</span>`;
+        let body = "";
+        if (page.page_image) {
+          body += `<div class="grid">${figure(imgUrl(job.id, page.page_image), "Full sheet")}</div>`;
+        }
+        if (page.reason) body += `<p class="meta">${page.reason}</p>`;
+        if (page.diagram) {
+          body += `<h3 style="margin:18px 0 4px;font-size:15px">Diagram crop</h3>`;
+          body += `<div class="grid">${figure(imgUrl(job.id, page.diagram), "Full diagram")}</div>`;
+          const wings = page.wings || [];
+          if (wings.length) {
+            body += `<h4 style="margin:16px 0 4px;font-size:14px">Wings (${wings.length})</h4>`;
+            body += `<div class="grid">${wings.map(w => {
+              const overlay = w.roi_overlay_image
+                ? figure(imgUrl(job.id, w.roi_overlay_image), `${w.name} ROI overlay`)
+                : "";
+              const wing = figure(imgUrl(job.id, w.image), `${w.name} wing`);
+              return overlay ? overlay + wing : wing;
+            }).join("")}</div>`;
+          }
+        }
+        return `<section class="page"><h2>Page ${page.page}${badge}</h2>${body || '<p class="meta">No drawing.</p>'}</section>`;
+      }).join("");
+    }
+
+    async function poll(jobId) {
+      const job = await fetch(`/api/jobs/${jobId}`).then(r => r.json());
+      renderJob(job);
+      if (job.status === "done" || job.status === "failed") {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    async function upload(file) {
+      if (pollTimer) clearInterval(pollTimer);
+      statusEl.classList.add("show");
+      bar.classList.remove("done", "fail");
+      statusTitle.textContent = "Uploading…";
+      statusMeta.textContent = file.name;
+      results.innerHTML = "";
+      const data = new FormData();
+      data.append("file", file);
+      const res = await fetch("/api/jobs", { method: "POST", body: data });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        statusTitle.textContent = "Upload failed";
+        statusMeta.textContent = err.detail || "error";
+        bar.classList.add("fail");
+        return;
+      }
+      const job = await res.json();
+      renderJob(job);
+      pollTimer = setInterval(() => poll(job.id), 1500);
+    }
+  </script>
+</body>
+</html>

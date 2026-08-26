@@ -61,7 +61,32 @@ Edit `.env` if needed. Defaults run the app in **mock model mode** (no trained w
 | `HVAC_PDF_DPI` | `120` | Render DPI for CV pages |
 | `HVAC_MAX_PDF_PAGES` | `8` | Max pages rendered for device costing |
 
-**Do not commit `.env`.** It is listed in `.gitignore`.
+**Do not commit `.env`.** It is listed in `.gitignore` (root + each app folder). Never put API keys in tracked files.
+
+## 3b. Dual-pathway drawing split + symbol count
+
+These folders are standalone. Full steps:
+
+- [`dual-pathway-drawing-split/SETUP.md`](dual-pathway-drawing-split/SETUP.md)
+- [`symbol-count-vision/SETUP.md`](symbol-count-vision/SETUP.md)
+
+Summary:
+
+```bash
+# Zooms from PDF
+cd dual-pathway-drawing-split
+python -m venv .venv && source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+cp .env.example .env   # set GROQ_API_KEY
+python scripts/run_batch.py --input "path/to/pdfs"
+
+# Symbol counts on a zoom folder or single tile
+cd ../symbol-count-vision
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # set GEMINI_API_KEY or GROQ_API_KEY
+uvicorn app:app --host 127.0.0.1 --port 8767
+```
 
 ## 4. Frontend
 

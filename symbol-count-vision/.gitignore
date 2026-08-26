@@ -1,0 +1,39 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*credentials*
+*secret*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Runtime jobs / uploads / debug artifacts
+storage/jobs/
+storage/_debug*/
+storage/_gemini*/
+storage/_pdf*/
+storage/_debug*/
+storage/*.png
+storage/*.jpg
+storage/*.jpeg
+storage/*.webp
+!storage/jobs/.gitkeep
+
+# OS / editors
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp

@@ -1,0 +1,864 @@
+{
+  "DATA RACK": [
+    {
+      "file": "2421a79bdf6271774a46e71fc0866b92ca0dda39.png",
+      "symbol": "R",
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "c3b21fd7416326d127a7bf12d58e0eaef26b4f07.png",
+      "symbol": "R",
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "43388a92fb05d7f9165c1b119d080fff827d4a65.png",
+      "symbol": "R",
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "GROUND BOX": [
+    {
+      "file": "16451186f16cec6658656091a26e7f8e2b5c2175.png",
+      "symbol": "G",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "ed7e140be42815a5e76475de1cc3df989a6a346f.png",
+      "symbol": "G",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "5e257cdbf4be34b56fe0d5d91d81edaeec11355c.png",
+      "symbol": "G",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "JUNCTION BOX": [
+    {
+      "file": "79ae9b3808ab55209ea7f34b83452bf38956cac2.png",
+      "symbol": "J",
+      "mfg_model": "COMMERCIAL GENERIC",
+      "part_number": "N/A",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "95065aa8b10a9a36d80603036c4e882b2238a62c.png",
+      "symbol": "J",
+      "mfg_model": "COMMERCIAL GENERIC",
+      "part_number": "N/A",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "fd956ea08555438c863844236106a703e1a6cceb.png",
+      "symbol": "J",
+      "mfg_model": "COMMERCIAL GENERIC",
+      "part_number": "N/A",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "UNDERGROUND CONDUIT": [
+    {
+      "file": "155a93de01a9eef0972a05bc61dffaadd90c2a60.png",
+      "symbol": null,
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "25439f50f84fb8313430a5f989ead4d19406eaf8.png",
+      "symbol": null,
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "aaea1349564d0c6144f35ab9cf6073c144269978.png",
+      "symbol": null,
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "CONDUIT EMT GRC": [
+    {
+      "file": "6f901b64c3561131e0f58e0838e50a2524c57233.png",
+      "symbol": null,
+      "mfg_model": "COMMERCIAL GENERIC",
+      "part_number": "N/A",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "1ab50bbcdfb08fc158ac0e468656318293989a21.png",
+      "symbol": null,
+      "mfg_model": "COMMERCIAL GENERIC",
+      "part_number": "N/A",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "8c2bcd826f2861b78acaace61e8467f0ea1b9d8b.png",
+      "symbol": null,
+      "mfg_model": "COMMERCIAL GENERIC",
+      "part_number": "N/A",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "CONDUIT STUB": [
+    {
+      "file": "cb0ce42cd2f1b27551a06581b6e7a56f4230170f.png",
+      "symbol": null,
+      "mfg_model": "COMMERCIAL GENERIC",
+      "part_number": "N/A",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "3d5ee2e169b03fc55acdd6f94bb20006a9a0393e.png",
+      "symbol": null,
+      "mfg_model": "COMMERCIAL GENERIC",
+      "part_number": "N/A",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "48b4834baf36d2d40e8ed8394cbcc5a5b3985e8d.png",
+      "symbol": null,
+      "mfg_model": "COMMERCIAL GENERIC",
+      "part_number": "N/A",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "SURFACE RACEWAY": [
+    {
+      "file": "0a67968c88eca3fe5da0a06fb63d2babed44a08d.png",
+      "symbol": null,
+      "mfg_model": "WIREMOLD",
+      "part_number": "WM2300",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "6d47069782c5e5b56d38f72ece8416fff604c9f8.png",
+      "symbol": null,
+      "mfg_model": "WIREMOLD",
+      "part_number": "WM5400",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "3bea4583e27c0396fa5c98c456fb1703a2869452.png",
+      "symbol": null,
+      "mfg_model": "WIREMOLD",
+      "part_number": "WM5500",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "125c4fe51631c523129a2701f775511e78f4f121.png",
+      "symbol": null,
+      "mfg_model": "WIREMOLD",
+      "part_number": "WM2300",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "f22ad1c7a2418b18ebab0d39197d010a06a4abfe.png",
+      "symbol": null,
+      "mfg_model": "WIREMOLD",
+      "part_number": "WM2300",
+      "source": "symbol_file.pdf"
+    },
+    {
+      "file": "4f80b2c150d61d1d9db0cb928b95c277a2753a8b.png",
+      "symbol": null,
+      "mfg_model": "WIREMOLD",
+      "part_number": "WM5400",
+      "source": "symbol_file.pdf"
+    },
+    {
+      "file": "72ffaf76b253e126785e928f4562f33186569a8b.png",
+      "symbol": null,
+      "mfg_model": "WIREMOLD",
+      "part_number": "WM5500",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "J HOOK SINGLE STACKED": [
+    {
+      "file": "ece3d644d64f2637c0aa1ad7c62e9b863cf7254a.png",
+      "symbol": null,
+      "mfg_model": "SEE SPECS",
+      "part_number": "SEE SPEC",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "0a0176babe86edd05b57fff14f14fa9f85a127d9.png",
+      "symbol": null,
+      "mfg_model": "SEE SPECS",
+      "part_number": "SEE SPEC",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "38ebd4c77161f1ab292beb9fca001952b622c1bf.png",
+      "symbol": null,
+      "mfg_model": "SEE SPECS",
+      "part_number": "SEE SPEC",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "DATA POLE": [
+    {
+      "file": "a16237d8d78d486402c7db0638a26ca10e99903d.png",
+      "symbol": null,
+      "mfg_model": "LEGRAND",
+      "part_number": "30TC-4**V",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "60034b7216add108d1bdc7b430ead9f2f89edb5b.png",
+      "symbol": null,
+      "mfg_model": "LEGRAND",
+      "part_number": "30TC-4**V",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "21a1ec4cdffc4e107d40e3a5aeee26f1d80179bf.png",
+      "symbol": null,
+      "mfg_model": "LEGRAND",
+      "part_number": "30TC-4**V",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "DATA PERMANENT LINK CAT6A JACK CABLE": [
+    {
+      "file": "e8fcb0475de11adf816fce823719aeb6e61327f7.png",
+      "symbol": "#",
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "cfa1e7ceac9af100ff7cc06a121b5add65a0fb84.png",
+      "symbol": "#",
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "895006091153641539498e8c8cea8e32f299b4aa.png",
+      "symbol": "#",
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "DATA LOCATION CAT6A JACK CABLE CEILING QTY 2": [
+    {
+      "file": "96eb5c43b198514291477f8fa1f15abf6b49b483.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "f1251e38b86ee0fec2ba554aa9b470282135e485.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "dfd07cd8196c4bb3808d99cf2f81c63e31233627.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "c3d148ae8df874f252236227e1b7c99d947c4df6.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "INTERIOR WIRELESS ACCESS POINT": [
+    {
+      "file": "96eb5c43b198514291477f8fa1f15abf6b49b483.png",
+      "symbol": "AP",
+      "mfg_model": "ARUBA",
+      "part_number": "OFCI",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "f1251e38b86ee0fec2ba554aa9b470282135e485.png",
+      "symbol": "AP",
+      "mfg_model": "ARUBA",
+      "part_number": "OFCI",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "c3d148ae8df874f252236227e1b7c99d947c4df6.png",
+      "symbol": "AP",
+      "mfg_model": "ARUBA",
+      "part_number": "OFCI",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "MOUNT": [
+    {
+      "file": "96eb5c43b198514291477f8fa1f15abf6b49b483.png",
+      "symbol": null,
+      "mfg_model": "ARUBA",
+      "part_number": "S0J40A",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "399e3f36e0b63199d60e3a26f073a5646ef6c99e.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "SEE 28 20 00",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "bb5139df25fef72c49177b0b7fa526fd861d5f18.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "SEE 28 20 00",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "8cbfc55ec9d180fd21583ef7eaa5a10a85176f38.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "SEE 28 20 00",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "6bcd00acea5d44023f3b577a1179c0646db120f1.png",
+      "symbol": null,
+      "mfg_model": "ARUBA",
+      "part_number": "R9H97A",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "df8be49b95009480e947315cd9091ff3d3760738.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "648cbb04414500abeabaa2c28cf2d42d27984d6b.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "826e804c421da2230822462707e3fee3c2c641ce.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "8f91b0bd6d9d8c1300391728ff06f1faa5cd2f89.png",
+      "symbol": null,
+      "mfg_model": null,
+      "part_number": "—",
+      "source": "1948BIDDrawings technical symbol (1).pdf"
+    }
+  ],
+  "CAT6A DATA DROP LOCATION QTY 1 NETWORK CAMERA": [
+    {
+      "file": "399e3f36e0b63199d60e3a26f073a5646ef6c99e.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 15 00",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "bb5139df25fef72c49177b0b7fa526fd861d5f18.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 15 00",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "8cbfc55ec9d180fd21583ef7eaa5a10a85176f38.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 15 00",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "df8be49b95009480e947315cd9091ff3d3760738.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 15 00",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "648cbb04414500abeabaa2c28cf2d42d27984d6b.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 15 00",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "7e38a3ffc521eab0447697df5cdd1364010f62ef.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 15 00",
+      "source": "symbol_file.pdf"
+    },
+    {
+      "file": "15692e6f3df7f9674edeb2fc8bcebc8804d60576.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 15 00",
+      "source": "symbol_file.pdf"
+    },
+    {
+      "file": "483f1f5c955b47bafd6de4593d97e4d3add9eb63.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 15 00",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "NETWORK CAMERA": [
+    {
+      "file": "399e3f36e0b63199d60e3a26f073a5646ef6c99e.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "OFCI",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "df8be49b95009480e947315cd9091ff3d3760738.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "648cbb04414500abeabaa2c28cf2d42d27984d6b.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "ed2440b8fb9b150d48368b436e8f3dad986c8dce.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "2209287505e08afa203fc3690ab6cb21e9663607.png",
+      "symbol": null,
+      "mfg_model": null,
+      "part_number": "—",
+      "source": "1948BIDDrawings technical symbol (1).pdf"
+    },
+    {
+      "file": "7e38a3ffc521eab0447697df5cdd1364010f62ef.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "OFCI",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "MULTI SENSOR EXTERIOR NETWORK CAMERA 4 SENSOR": [
+    {
+      "file": "bb5139df25fef72c49177b0b7fa526fd861d5f18.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "OFCI",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "8cbfc55ec9d180fd21583ef7eaa5a10a85176f38.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "OFCI",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "15692e6f3df7f9674edeb2fc8bcebc8804d60576.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "OFCI",
+      "source": "symbol_file.pdf"
+    },
+    {
+      "file": "483f1f5c955b47bafd6de4593d97e4d3add9eb63.png",
+      "symbol": null,
+      "mfg_model": "AXIS",
+      "part_number": "OFCI",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "NETWORK VIDEO RECORDER": [
+    {
+      "file": "052dd7a723a4a8d414fa75e16f29b5a1ad9b8008.png",
+      "symbol": "NVR",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "de0c8a5625d72b6d4b7df701477078af188cc337.png",
+      "symbol": "NVR",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "abb1d31d231dcb23fdde1af79e9f9fa4e5132548.png",
+      "symbol": "NVR",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "SIGNAL TERMINAL CABINET": [
+    {
+      "file": "9c4d786061fd9930cf725133c7009676c077684d.png",
+      "symbol": "STC",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "9425fc9cea35a0dcd396e55e983a4b3c189cfe6d.png",
+      "symbol": "STC",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "b4c1172bef719df9b8fb89be96b8e93f10ad52d0.png",
+      "symbol": "STC",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "GROUND BUS BAR": [
+    {
+      "file": "d1d1d36c38c3c1b34852a3b7b3a142552ff6a8d7.png",
+      "symbol": "TGB",
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "f63463c27254df2c190e7b39d2e16b8664d0e315.png",
+      "symbol": "TGB",
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "c4505df4cfe82d7fd0bc6d13d3930f77722dbf26.png",
+      "symbol": "TGB",
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "CAT6A DATA DROP LOCATION QTY 1 IP CLOCK SPEAKER IP MODULE COMBO BOX BOGEN": [
+    {
+      "file": "fc52f511cbea94cb4a08904117e83d9aefd8ed7f.png",
+      "symbol": null,
+      "mfg_model": "—",
+      "part_number": "SEE SHEET T701",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "49b2f6c6dd28d4cd30864b545e6af76dbf4514d5.png",
+      "symbol": null,
+      "mfg_model": "—",
+      "part_number": "SEE SHEET T701",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "8af6391c6205643183f70cb3978a73a017b297a8.png",
+      "symbol": null,
+      "mfg_model": null,
+      "part_number": "SEE SHEET T701",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "CAT6A DATA DROP LOCATION EXTERIOR INTERCOM SPEAKER IP MODULE BOGEN": [
+    {
+      "file": "2475c8e8127825812a3ccb59fdbe5322135d91e6.png",
+      "symbol": "WP",
+      "mfg_model": "—",
+      "part_number": "SEE SHEET T701",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "6270811e9cdbc02cada23be5836adbfde83a1605.png",
+      "symbol": "WP",
+      "mfg_model": "—",
+      "part_number": "SEE SHEET T701",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "3218394ff76a266b283f7dde59899aa2b1be667a.png",
+      "symbol": "WP",
+      "mfg_model": null,
+      "part_number": "SEE SHEET T701",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "INTRUSION ALARM CONTROL PANEL": [
+    {
+      "file": "2659acadc58bdf330d2862136be7fab6add7e839.png",
+      "symbol": "IACP",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "5968c0c051ca252584a5498c7380fa7f7324ac21.png",
+      "symbol": "IACP",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "223729f270edf50b12e0eed6e518599c2beedadd.png",
+      "symbol": "IACP",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "FIRE ALARM CONTROL PANEL": [
+    {
+      "file": "83908edcce15d6c99156bcb595efdaca9e7af2c7.png",
+      "symbol": "FACP",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "f316b5012fb429095f2713e9a5f2c92baec19ef2.png",
+      "symbol": "FACP",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "MINIMUM POINT OF ENTRY": [
+    {
+      "file": "8f32da0f2cf44422cabbbadb47561f9ab556b17d.png",
+      "symbol": "MPOE",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "f2cc7c828f657c6472a208fcb61d2ed27a098123.png",
+      "symbol": "MPOE",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "c936635fa8a2b10c8dae8ffdb786f1de0cddb827.png",
+      "symbol": "MPOE",
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "INTERCOM CONSOLE": [
+    {
+      "file": "9152c278dcaf31cd54b1cf795eb33b2ad440e777.png",
+      "symbol": "NQ-CON",
+      "mfg_model": "BOGEN",
+      "part_number": "SEE SHEET T701",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "7d1665d0fce33ff4a70b5cfa548c935e7f63f36c.png",
+      "symbol": "NQ-CON",
+      "mfg_model": "BOGEN",
+      "part_number": "SEE SHEET T701",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "f17a673698b20e742e836c75a2915df8ac97dcc0.png",
+      "symbol": "NQ-CON",
+      "mfg_model": "BOGEN",
+      "part_number": "SEE SHEET T701",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "LADDER RACK": [
+    {
+      "file": "5f89886ea6813df3d79b098100afaf978b9806d7.png",
+      "symbol": null,
+      "mfg_model": "CHATSWORTH PRODUCTS",
+      "part_number": "11275-712",
+      "source": "1948BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "92d7e6bb904d0bd91eccd9392d9589358231f824.png",
+      "symbol": null,
+      "mfg_model": "CHATSWORTH PRODUCTS",
+      "part_number": "11275-712",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "80eac0abb584944db44ebe19010c8a3a4b5b6e31.png",
+      "symbol": null,
+      "mfg_model": "CHATSWORTH PRODUCTS",
+      "part_number": "11275-712",
+      "source": "symbol_file.pdf"
+    }
+  ],
+  "SURFACE RACEWAY DUAL CHANNEL": [
+    {
+      "file": "04e75c4121cb064afdce5f26aa258dbb4ba90bd8.png",
+      "symbol": null,
+      "mfg_model": "WIREMOLD",
+      "part_number": "WM2300BACD",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "5147c5e5a92d07c246fadf89c2617af9fe3b6993.png",
+      "symbol": null,
+      "mfg_model": "WIREMOLD",
+      "part_number": "WM5400",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "CABLE TRAY": [
+    {
+      "file": "e05b1fa6ae438a32e8a161820a054fee8bfc2f1b.png",
+      "symbol": null,
+      "mfg_model": "B-LINE",
+      "part_number": "FT4X12X10",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "MOUNT T BAR J BOX": [
+    {
+      "file": "f1251e38b86ee0fec2ba554aa9b470282135e485.png",
+      "symbol": null,
+      "mfg_model": "ARUBA",
+      "part_number": "S0J40A",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    },
+    {
+      "file": "dfd07cd8196c4bb3808d99cf2f81c63e31233627.png",
+      "symbol": null,
+      "mfg_model": "ARUBA",
+      "part_number": "R7J39A",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "INTERIOR WIRELESS ACCESS POINT HIGH DENSITY": [
+    {
+      "file": "dfd07cd8196c4bb3808d99cf2f81c63e31233627.png",
+      "symbol": "AP",
+      "mfg_model": "ARUBA",
+      "part_number": "OFCI",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "CAT6A DATA DROP LOCATION QTY 2 EXTERIOR WIRELESS ACCESS POINT": [
+    {
+      "file": "85f0e1eefdb9fc3e542fb6ce64e104c30521316a.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 10 00",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "EXTERIOR WIRELESS ACCESS POINT": [
+    {
+      "file": "6bcd00acea5d44023f3b577a1179c0646db120f1.png",
+      "symbol": null,
+      "mfg_model": "ARUBA",
+      "part_number": "OFCI",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "MULTI SENSOR EXTERIOR NETWORK CAMERA 2 SENSOR": [
+    {
+      "file": "6c2ddea15a9eeb6a150c1e2c41274e9453e1e654.png",
+      "symbol": null,
+      "mfg_model": "PANDUIT",
+      "part_number": "SEE 27 15 00",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "CAT6A DATA DROP LOCATION INTERIOR INTERCOM SPEAKER IP MODULE": [
+    {
+      "file": "9a6d839e856bf7c842240fcedb6ef1e16cfc4d51.png",
+      "symbol": null,
+      "mfg_model": "BOGEN",
+      "part_number": "SEE SHEET T701",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "CAT6A DATA DROP LOCATION LAY IN SPEAKER IP MODULE": [
+    {
+      "file": "d7f8064e2367f3c9cf043628da2a333001577273.png",
+      "symbol": null,
+      "mfg_model": "BOGEN",
+      "part_number": "SEE SHEET T701",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "PHONE HANDSET EQUIPMENT": [
+    {
+      "file": "59955f92fda461480990ef35b229851efeb2e9c6.png",
+      "symbol": null,
+      "mfg_model": "POLY",
+      "part_number": "OFCI",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "AV SPEAKER": [
+    {
+      "file": "4e03b9eb3dadc8260978da9be908bec9648b9f03.png",
+      "symbol": null,
+      "mfg_model": "LOWELL",
+      "part_number": "CT830A-T870",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "AUDIOVISUAL ENCLOSURE": [
+    {
+      "file": "4ce16b57348cf20807a3246f7fe11161ae3e9182.png",
+      "symbol": null,
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ],
+  "UNINTERRUPTIBLE POWER SUPPLY DATA CENTER": [
+    {
+      "file": "555ca51ffc8dc2a942ec8c6dc62d821e3ca63cd0.png",
+      "symbol": null,
+      "mfg_model": "EXISTING",
+      "part_number": "EXISTING",
+      "source": "1961BIDDrawings technical symbol.pdf"
+    }
+  ]
+}
