@@ -17,16 +17,18 @@ drawing-zoom-split/storage/technical_symbols/
 symbol-count-vision/storage/jobs/
 symbol-count-vision/storage/_*/
 
-# Local-only folders / HVAC leftovers (not part of this repo)
+# Local-only folders (not on GitHub)
 hvac-cost-estimator/
 vision-extraction/
 synthetic_hvac_data/
 dual-pathway-drawing-split/
-Real data/
 Architecture*.png
 *.docx
 setup.ps1
 setup.sh
+
+# Duplicate scratch copy of requirements
+Real data/requirements - Copy/
 
 # Python
 __pycache__/

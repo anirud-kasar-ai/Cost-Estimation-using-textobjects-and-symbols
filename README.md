@@ -1,11 +1,12 @@
 # Cost Estimation — Drawing Split & Symbol Count
 
-This repo contains **two standalone tools** for bid drawing PDFs:
+This repo contains **two standalone tools** plus sample bid drawing PDFs:
 
-| Folder | Role | Setup |
-|--------|------|--------|
+| Path | Role | Setup |
+|------|------|--------|
 | [`drawing-zoom-split/`](drawing-zoom-split/) | PDF → wing crops + 653px zoom tiles | [SETUP](drawing-zoom-split/SETUP.md) |
 | [`symbol-count-vision/`](symbol-count-vision/) | Count legend symbols on tiles / zoom folders | [SETUP](symbol-count-vision/SETUP.md) |
+| [`Real data/`](Real%20data/) | Sample bid drawing PDFs (Git LFS) | — |
 
 ## Quick start
 
@@ -39,6 +40,14 @@ uvicorn app:app --host 127.0.0.1 --port 8767
 ├── README.md
 ├── SETUP.md
 ├── .gitignore
+├── Real data/              # Sample bid PDFs (Git LFS)
 ├── drawing-zoom-split/     # PDF → wings + zoom tiles
 └── symbol-count-vision/    # Legend symbol counting UI
+```
+
+Sample drawings are in [`Real data/`](Real%20data/) (Git LFS). After clone:
+
+```bash
+git lfs install
+git lfs pull
 ```

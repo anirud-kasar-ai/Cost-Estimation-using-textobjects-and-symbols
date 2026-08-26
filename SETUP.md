@@ -12,9 +12,12 @@ Two folders only: **drawing-zoom-split** (PDF → zoom tiles) and **symbol-count
 ## 1. Clone
 
 ```bash
+git lfs install
 git clone https://github.com/anirud-kasar-ai/Cost-Estimation-using-textobjects-and-symbols.git
 cd Cost-Estimation-using-textobjects-and-symbols
 ```
+
+Bid drawing PDFs live in `Real data/` (stored with **Git LFS**). Use them as `--input` for drawing-zoom-split.
 
 ## 2. Drawing zoom split
 
@@ -28,7 +31,7 @@ python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env   # Windows: copy .env.example .env
 # Edit .env — set GROQ_API_KEY
-python scripts/run_batch.py --input "path/to/pdfs"
+python scripts/run_batch.py --input "../Real data"
 ```
 
 Optional UI: `python app.py` → http://127.0.0.1:8766
