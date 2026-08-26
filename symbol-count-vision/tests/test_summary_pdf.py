@@ -11,7 +11,7 @@ from pipeline.symbol_legend import parse_symbol_file
 
 SUMMARY_PDF = (
     project_root.parent
-    / "dual-pathway-drawing-split"
+    / "drawing-zoom-split"
     / "storage"
     / "technical_symbols"
     / "1948BIDDrawings technical symbol.pdf"

@@ -1,11 +1,13 @@
 # Setup guide
 
+Two folders only: **drawing-zoom-split** (PDF → zoom tiles) and **symbol-count-vision** (symbol counts).
+
 ## Prerequisites
 
 - **Python 3.10+** (3.11 recommended)
-- **Node.js 20+** and npm
 - Git
-- (Optional) [Poppler for Windows](https://github.com/oschwartz10612/poppler-windows/releases) — not required; PyMuPDF is used as a fallback
+- [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) (for symbol-count-vision)
+- API keys: `GROQ_API_KEY` (drawing split); `GEMINI_API_KEY` and/or `GROQ_API_KEY` (symbol count)
 
 ## 1. Clone
 
@@ -14,141 +16,44 @@ git clone https://github.com/anirud-kasar-ai/Cost-Estimation-using-textobjects-a
 cd Cost-Estimation-using-textobjects-and-symbols
 ```
 
-## 2. Backend
+## 2. Drawing zoom split
+
+Full steps: [`drawing-zoom-split/SETUP.md`](drawing-zoom-split/SETUP.md)
 
 ```bash
-cd hvac-cost-estimator
+cd drawing-zoom-split
 python -m venv .venv
-```
-
-Activate the virtualenv:
-
-```bash
-# Windows (PowerShell / cmd)
-.venv\Scripts\activate
-
-# macOS / Linux
-source .venv/bin/activate
-```
-
-Install dependencies:
-
-```bash
+# Windows: .\.venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-Optional heavy ML stack (real Detectron2 / PaddleOCR / ONNX — only if `HVAC_USE_MOCK_MODELS=false`):
-
-```bash
-pip install -r requirements-ml.txt
-```
-
-## 3. Environment file
-
-```bash
-# Windows
-copy .env.example .env
-
-# macOS / Linux
-cp .env.example .env
-```
-
-Edit `.env` if needed. Defaults run the app in **mock model mode** (no trained weights required).
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `HVAC_USE_MOCK_MODELS` | `true` | Mock detectors/OCR vs real models |
-| `HVAC_PDF_DPI` | `120` | Render DPI for CV pages |
-| `HVAC_MAX_PDF_PAGES` | `8` | Max pages rendered for device costing |
-
-**Do not commit `.env`.** It is listed in `.gitignore` (root + each app folder). Never put API keys in tracked files.
-
-## 3b. Dual-pathway drawing split + symbol count
-
-These folders are standalone. Full steps:
-
-- [`dual-pathway-drawing-split/SETUP.md`](dual-pathway-drawing-split/SETUP.md)
-- [`symbol-count-vision/SETUP.md`](symbol-count-vision/SETUP.md)
-
-Summary:
-
-```bash
-# Zooms from PDF
-cd dual-pathway-drawing-split
-python -m venv .venv && source .venv/bin/activate   # Windows: .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-cp .env.example .env   # set GROQ_API_KEY
+cp .env.example .env   # Windows: copy .env.example .env
+# Edit .env — set GROQ_API_KEY
 python scripts/run_batch.py --input "path/to/pdfs"
+```
 
-# Symbol counts on a zoom folder or single tile
-cd ../symbol-count-vision
-python -m venv .venv && source .venv/bin/activate
+Optional UI: `python app.py` → http://127.0.0.1:8766
+
+## 3. Symbol count vision
+
+Full steps: [`symbol-count-vision/SETUP.md`](symbol-count-vision/SETUP.md)
+
+```bash
+cd symbol-count-vision
+python -m venv .venv
+# Windows: .\.venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # set GEMINI_API_KEY or GROQ_API_KEY
-uvicorn app:app --host 127.0.0.1 --port 8767
+cp .env.example .env   # Windows: copy .env.example .env
+# Edit .env — set GEMINI_API_KEY or GROQ_API_KEY
+uvicorn app:app --reload --reload-dir pipeline --reload-dir static --host 127.0.0.1 --port 8767
 ```
 
-## 4. Frontend
+Open http://127.0.0.1:8767
 
-```bash
-cd frontend
-npm install
-cd ..
+Upload a technical-symbol PDF plus either one plan tile or a zoom folder from:
+
+```text
+drawing-zoom-split/storage/jobs/<job>/04_wings/<WING>/zooms/page_XXX/
 ```
 
-## 5. Run
-
-**Terminal 1 — API** (http://localhost:8000):
-
-```bash
-cd hvac-cost-estimator\backend
-..\..\hvac-cost-estimator\.venv\Scripts\activate
-# if already at hvac-cost-estimator with venv active:
-cd backend
-uvicorn main:app --reload
-```
-
-From `hvac-cost-estimator/` with venv active:
-
-```bash
-cd backend
-uvicorn main:app --reload
-```
-
-**Terminal 2 — UI** (http://localhost:5173):
-
-```bash
-cd hvac-cost-estimator/frontend
-npm run dev
-```
-
-Open http://localhost:5173 and upload a drawing PDF. On upload, a requirement PDF is written under `backend/storage/requirements/`.
-
-## 6. Sample PDF (optional)
-
-```bash
-cd hvac-cost-estimator/backend
-python scripts/generate_sample_pdf.py storage/sample_layout.pdf
-```
-
-## 7. Tests (optional)
-
-```bash
-# Backend
-cd hvac-cost-estimator/backend
-pytest -q
-
-# Frontend
-cd hvac-cost-estimator/frontend
-npm test
-```
-
-## One-shot Windows setup script
-
-From the repo root you can also run:
-
-```powershell
-.\setup.ps1
-```
-
-This creates the venv, installs Python/Node deps, and copies `.env.example` → `.env` if missing.
+**Do not commit `.env`.** Keys stay local; only `.env.example` is tracked.

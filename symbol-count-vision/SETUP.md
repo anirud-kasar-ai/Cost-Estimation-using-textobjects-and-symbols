@@ -66,7 +66,7 @@ Open http://127.0.0.1:8767
 Typical zoom folder path after dual-pathway processing:
 
 ```text
-dual-pathway-drawing-split/storage/jobs/<job>/04_wings/<WING>/zooms/page_XXX/
+drawing-zoom-split/storage/jobs/<job>/04_wings/<WING>/zooms/page_XXX/
 ```
 
 Jobs are written under `storage/jobs/<job_id>/` (ignored by git).

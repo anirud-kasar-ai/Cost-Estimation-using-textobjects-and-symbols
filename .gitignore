@@ -9,13 +9,22 @@
 *credentials*.json
 **/secrets/
 
-# Standalone tool job outputs (large; may contain user uploads)
-dual-pathway-drawing-split/storage/jobs/
-dual-pathway-drawing-split/storage/extraction_cache/
-dual-pathway-drawing-split/storage/requirements/
-dual-pathway-drawing-split/storage/technical_symbols/
+# Job outputs (large; may contain uploads)
+drawing-zoom-split/storage/jobs/
+drawing-zoom-split/storage/extraction_cache/
+drawing-zoom-split/storage/requirements/
+drawing-zoom-split/storage/technical_symbols/
 symbol-count-vision/storage/jobs/
 symbol-count-vision/storage/_*/
+
+# Local-only folders (not part of this repo)
+hvac-cost-estimator/
+vision-extraction/
+synthetic_hvac_data/
+dual-pathway-drawing-split/
+Real data/
+Architecture*.png
+*.docx
 
 # Python
 __pycache__/
@@ -39,21 +48,7 @@ dist/
 coverage/
 *.tsbuildinfo
 
-# App runtime / uploads / generated artifacts
-hvac-cost-estimator/backend/storage/*
-!hvac-cost-estimator/backend/storage/.gitkeep
-# Keep generated requirement PDFs in the repo
-!hvac-cost-estimator/backend/storage/requirements/
-!hvac-cost-estimator/backend/storage/requirements/**
-# Keep generated technical symbol PDFs in the repo
-!hvac-cost-estimator/backend/storage/technical_symbols/
-!hvac-cost-estimator/backend/storage/technical_symbols/**
-hvac-cost-estimator/backend/models/*
-!hvac-cost-estimator/backend/models/.gitkeep
 mlruns/
-
-# Duplicate / scratch requirement copies
-Real data/requirements - Copy/
 
 # OS / editors
 .idea/
@@ -68,8 +63,3 @@ Desktop.ini
 *.tmp
 _*.png
 _*.pdf
-backend/storage/_*.png
-backend/storage/_*.pdf
-# Generated symbol crop previews (debug only)
-hvac-cost-estimator/backend/storage/technical_symbols/_preview/
-hvac-cost-estimator/backend/storage/technical_symbols/_preview2/

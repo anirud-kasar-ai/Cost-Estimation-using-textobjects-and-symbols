@@ -7,7 +7,7 @@ Pipeline: detect (OCR + template glyphs + CV + optional Gemini/Groq vision) → 
 ## Docs
 
 - **[SETUP.md](SETUP.md)** — install, `.env`, run UI
-- Companion zoom exporter: [`../dual-pathway-drawing-split`](../dual-pathway-drawing-split)
+- Companion zoom exporter: [`../drawing-zoom-split`](../drawing-zoom-split)
 
 ## Quick start
 
