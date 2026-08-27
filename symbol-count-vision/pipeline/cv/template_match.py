@@ -23,10 +23,16 @@ logger = logging.getLogger(__name__)
 # Drop-mark glyph is counted geometrically (solid triangles), not by template.
 DROP_MARK_GLYPH = "#"
 SHORT_TAG_TEMPLATE_RE = re.compile(r"^[A-Z]{2,3}$")
+# True wall/raceway RUNS — counting these as discrete glyphs false-fires
+# on every straight wall. CONDUIT STUB, DATA POLE, and J-HOOK clusters are
+# discrete look-alikes handled separately (not this regex).
 LINEAR_GLYPH_RE = re.compile(
-    r"CONDUIT|RACEWAY|LADDER\s+RACK|J-?HOOK|PERMANENT\s+LINK|DATA\s+POLE",
+    r"RACEWAY|LADDER\s+RACK|PERMANENT\s+LINK|(?<!STUB\s)CONDUIT(?!\s+STUB)",
     re.IGNORECASE,
 )
+# Three J's on a line would template-match every isolated J — skip that glyph
+# file, but still count J-HOOK via OCR clustering (not LINEAR_GLYPH_RE).
+_JHOOK_TEMPLATE_SKIP_RE = re.compile(r"J-?HOOK", re.IGNORECASE)
 
 # Camera-family glyphs need finer scales on zoom tiles, but a *higher*
 # threshold than the default — at 0.60 they match keynote boxes and wall
@@ -178,6 +184,8 @@ def detect_symbols_from_glyphs(
             continue
 
         if LINEAR_GLYPH_RE.search(label) or LINEAR_GLYPH_RE.search(stem):
+            continue
+        if _JHOOK_TEMPLATE_SKIP_RE.search(label) or _JHOOK_TEMPLATE_SKIP_RE.search(stem):
             continue
         if label.strip() == DROP_MARK_GLYPH:
             continue

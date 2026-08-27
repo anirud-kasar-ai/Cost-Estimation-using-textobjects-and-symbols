@@ -20,7 +20,7 @@ def test_architect_ocr_prompt_spec_matches_user_schema():
     assert "licensed senior architect" in spec["system_instruction"]
     assert "CAD/BIM" in spec["system_instruction"]
     assert spec["inputs"]["expected_context"] == "Equipment Tags"
-    assert len(spec["extraction_rules"]) == 10
+    assert len(spec["extraction_rules"]) == 11
     assert "ALPHABETIC TAGS" in spec["extraction_rules"][4]
     assert "NUMERIC LABELS" in spec["extraction_rules"][5]
     assert "DENSE OVERLAP" in spec["extraction_rules"][9]

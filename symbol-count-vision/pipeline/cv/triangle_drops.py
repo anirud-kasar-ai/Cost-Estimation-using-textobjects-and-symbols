@@ -272,6 +272,169 @@ def _merge_cameras(groups: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
     return merged
 
 
+def _detect_bowtie_poles(binary: np.ndarray) -> list[dict[str, Any]]:
+    """Square + opposing filled triangles (DATA POLE), not standalone # drops.
+
+    Use actual ink in the bounding patch (not ``contourArea``, which for a
+    closed square is the enclosed interior). Require *both* sides of one
+    axis to be filled so a single drop triangle cannot match.
+    """
+    import cv2
+
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    poles: list[dict[str, Any]] = []
+    for contour in contours:
+        x, y, width, height = cv2.boundingRect(contour)
+        if width < 22 or height < 22:
+            continue
+        ratio = width / float(height)
+        if ratio < 0.75 or ratio > 1.35:
+            continue
+        patch = binary[y : y + height, x : x + width]
+        if patch.size == 0:
+            continue
+        ink = float(np.mean(patch > 0))
+        # Solid square / empty ring / single triangle fill-rates.
+        if ink < 0.28 or ink > 0.72:
+            continue
+        third_h = max(1, height // 3)
+        third_w = max(1, width // 3)
+        top = float(np.mean(patch[:third_h, :] > 0))
+        bot = float(np.mean(patch[height - third_h :, :] > 0))
+        left = float(np.mean(patch[:, :third_w] > 0))
+        right = float(np.mean(patch[:, width - third_w :] > 0))
+        # A lone filled triangle is dark on one side only (base vs tip).
+        if max(top, bot) > 1.55 * (min(top, bot) + 0.05):
+            continue
+        if max(left, right) > 1.55 * (min(left, right) + 0.05):
+            continue
+        side = min(left, right)
+        vert = min(top, bot)
+        horiz_bowtie = left >= 0.32 and right >= 0.32 and top < side * 0.85 and bot < side * 0.85
+        vert_bowtie = top >= 0.32 and bot >= 0.32 and left < vert * 0.85 and right < vert * 0.85
+        if not (horiz_bowtie or vert_bowtie):
+            continue
+        poles.append(
+            {
+                "x1": float(x),
+                "y1": float(y),
+                "x2": float(x + width),
+                "y2": float(y + height),
+                "cx": x + width / 2.0,
+                "cy": y + height / 2.0,
+            }
+        )
+    return poles
+
+
+def _detect_camera_body_rects(binary: np.ndarray) -> list[dict[str, Any]]:
+    """Compact hollow rectangles that form a NETWORK CAMERA body under a triangle.
+
+    Wall raceway boxes are long open rectangles — they must not match, or
+    nearby ``#`` drops would be skipped as camera parts.
+    """
+    import cv2
+
+    contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    rects: list[dict[str, Any]] = []
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area < 40 or area > 1200:
+            continue
+        x, y, width, height = cv2.boundingRect(contour)
+        if width < 14 or height < 8:
+            continue
+        if width > 72 or height > 40:
+            continue
+        aspect = width / float(height)
+        if aspect < 1.6 or aspect > 3.2:
+            continue
+        patch = binary[y : y + height, x : x + width]
+        if patch.size == 0:
+            continue
+        ink = float(np.mean(patch > 0))
+        if ink < 0.12 or ink > 0.48:
+            continue
+        rects.append(
+            {
+                "x1": float(x),
+                "y1": float(y),
+                "x2": float(x + width),
+                "y2": float(y + height),
+                "cx": x + width / 2.0,
+                "cy": y + height / 2.0,
+            }
+        )
+    return rects
+
+
+def _triangle_inside_box(
+    cand: dict[str, float],
+    boxes: list[dict[str, Any]],
+    *,
+    pad: float = 2.0,
+) -> bool:
+    cx, cy = cand["cx"], cand["cy"]
+    for box in boxes:
+        if (
+            box["x1"] - pad <= cx <= box["x2"] + pad
+            and box["y1"] - pad <= cy <= box["y2"] + pad
+        ):
+            return True
+    return False
+
+
+def _triangle_on_camera_body(
+    cand: dict[str, float],
+    rects: list[dict[str, Any]],
+) -> bool:
+    """Filled triangle sitting on top of a hollow camera-body rectangle."""
+    cx, cy = cand["cx"], cand["cy"]
+    tip_y = cand.get("tip_y", cy)
+    for rect in rects:
+        if not (rect["x1"] - 4 <= cx <= rect["x2"] + 4):
+            continue
+        if rect["y1"] - cand["h"] * 1.4 <= cy <= rect["y1"] + cand["h"] * 0.45:
+            return True
+        if rect["y1"] - 6 <= tip_y <= rect["y1"] + 8:
+            return True
+    return False
+
+
+def detect_data_pole_boxes(
+    image: Image.Image | Path,
+    *,
+    exclude_top_pct: float = 0.12,
+) -> list[dict[str, Any]]:
+    """DATA POLE glyphs: square with opposing filled triangles (bowtie)."""
+    import cv2
+
+    if isinstance(image, Path):
+        gray = cv2.imread(str(image), cv2.IMREAD_GRAYSCALE)
+    else:
+        gray = _pil_to_gray(image)
+    if gray is None:
+        return []
+    h, _w = gray.shape[:2]
+    y_min = int(h * max(0.0, exclude_top_pct))
+    _, binary = cv2.threshold(gray, 80, 255, cv2.THRESH_BINARY_INV)
+    if y_min > 0:
+        binary[:y_min, :] = 0
+    opened = cv2.morphologyEx(binary, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
+    poles = _detect_bowtie_poles(binary) + _detect_bowtie_poles(opened)
+    merged: list[dict[str, Any]] = []
+    for pole in poles:
+        if pole["cy"] < y_min:
+            continue
+        if any(
+            (pole["cx"] - m["cx"]) ** 2 + (pole["cy"] - m["cy"]) ** 2 <= 20**2
+            for m in merged
+        ):
+            continue
+        merged.append(pole)
+    return merged
+
+
 def _read_qty_digit(gray: np.ndarray, box: dict[str, Any]) -> int | None:
     """Read the quantity digit printed beside a drop triangle (``# = QTY``)."""
     try:
@@ -493,6 +656,8 @@ def detect_drop_marks(
             continue
         merged_circles.append((cx, cy, radius))
     glyph_circles = merged_circles
+    pole_boxes = _detect_bowtie_poles(binary) + _detect_bowtie_poles(opened)
+    camera_bodies = _detect_camera_body_rects(binary) + _detect_camera_body_rects(opened)
 
     # Expand camera boxes that came from X-box alone so neighbouring tip
     # triangles of the same glyph are excluded from the drop list.
@@ -521,6 +686,12 @@ def detect_drop_marks(
         cx, cy = cand["cx"], cand["cy"]
         # AP/WP glyphs are a solid triangle inside a circular ring — not # drops.
         if _triangle_inside_circle(cand, glyph_circles):
+            continue
+        # DATA POLE: triangles that form the bowtie inside a square.
+        if _triangle_inside_box(cand, pole_boxes, pad=3.0):
+            continue
+        # NETWORK CAMERA profile: filled triangle sitting on a hollow body rect.
+        if _triangle_on_camera_body(cand, camera_bodies):
             continue
         # X-box corners often approx as tiny upward triangles — skip them.
         # Soften when a callout keynote is nearby (wall data drops).

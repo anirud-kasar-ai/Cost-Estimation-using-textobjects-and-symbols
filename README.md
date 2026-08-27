@@ -5,6 +5,7 @@ This repo contains **two standalone tools** plus sample bid drawing PDFs:
 | Path | Role | Setup |
 |------|------|--------|
 | [`drawing-zoom-split/`](drawing-zoom-split/) | PDF → wing crops + 653px zoom tiles | [SETUP](drawing-zoom-split/SETUP.md) |
+| [`dual-pathway-drawing-split/`](dual-pathway-drawing-split/) | Dual-pathway PDF split (text layer + vision) | [SETUP](dual-pathway-drawing-split/SETUP.md) |
 | [`symbol-count-vision/`](symbol-count-vision/) | Count legend symbols on tiles / zoom folders | [SETUP](symbol-count-vision/SETUP.md) |
 | [`Real data/`](Real%20data/) | Sample bid drawing PDFs (Git LFS) | — |
 
@@ -41,8 +42,9 @@ uvicorn app:app --host 127.0.0.1 --port 8767
 ├── SETUP.md
 ├── .gitignore
 ├── Real data/              # Sample bid PDFs (Git LFS)
-├── drawing-zoom-split/     # PDF → wings + zoom tiles
-└── symbol-count-vision/    # Legend symbol counting UI
+├── drawing-zoom-split/              # PDF → wings + zoom tiles
+├── dual-pathway-drawing-split/      # Dual-pathway PDF split
+└── symbol-count-vision/             # Legend symbol counting UI
 ```
 
 Sample drawings are in [`Real data/`](Real%20data/) (Git LFS). After clone:

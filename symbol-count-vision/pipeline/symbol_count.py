@@ -18,6 +18,11 @@ from pipeline.cv.nms import (
     suppress_triangles_near_tags,
     suppress_triangles_near_templates,
 )
+from pipeline.cv.lookalike import (
+    conduit_stub_legend_key,
+    detect_conduit_stubs,
+    reclassify_j_hook_clusters,
+)
 from pipeline.cv.ocr_tags import (
     ap_skip_centers_from_ocr,
     clock_combo_skip_centers,
@@ -26,7 +31,11 @@ from pipeline.cv.ocr_tags import (
 )
 from pipeline.cv.tag_match import count_key, tagged_legend_keys, text_legend_keys
 from pipeline.cv.template_match import detect_symbols_from_glyphs
-from pipeline.cv.triangle_drops import detect_drop_marks, device_glyph_skip_centers
+from pipeline.cv.triangle_drops import (
+    detect_data_pole_boxes,
+    detect_drop_marks,
+    device_glyph_skip_centers,
+)
 from pipeline.overlay import draw_detections_overlay
 from pipeline.symbol_legend import (
     SymbolTableInfo,
@@ -48,6 +57,7 @@ OVERLAP / DENSE ZOOM (critical — do not double-count):
   ONE equipment instance for that tag — do not count the glyph and the letters twice.
 - Clustered wall runs of the same tag (e.g. several J along a path) count separately
   only when centers are clearly distinct and not the same overlapping ink.
+  Exception: two or more J's on one horizontal line are ONE J-HOOK, not many J-boxes.
 - Ignore elevations like +48 / +49, sheet callouts like 1/D5, KEY PLAN text, and
   room labels (A-1, A-2, A-3, RR/B) — they are not legend equipment counts.
 - Pipe callouts (1|5, 1|8, 1|13) are keynotes tied to nearby drops; do not invent
@@ -95,12 +105,19 @@ HOW TO READ THIS DRAWING FAMILY:
 
 3) LETTER EQUIPMENT TAGS (J, G, AP, WP, TGB, NVR, …):
    - LOOKS LIKE: short upright or rotated capital letters on/near walls or under glyphs
-     (AP under a circle; WP by a horn/speaker; J along a cable path).
+     (AP under a circle; WP by a horn/speaker; a SINGLE J along a cable path).
    - COUNT: one per distinct letter-tag instance matching the legend tag.
+   - J vs J-HOOK: a row of J's on one line (—J—J—J—) is J-HOOK, not junction boxes.
 
 4) NETWORK CAMERA:
    - LOOKS LIKE: two opposing solid triangles with a small X-box between (hourglass),
      often with QTY digits outside the tips — that assembly is ONE camera, not drops.
+
+4b) DATA POLE:
+   - LOOKS LIKE: square with two opposing filled triangles (bowtie). Not '#' drops.
+
+4c) CONDUIT STUB:
+   - LOOKS LIKE: letter E with a long middle bar on conduit. Not the word EAST.
 
 5) NEVER COUNT AS LEGEND EQUIPMENT:
    - Elevations AFF: "+48", "+49" (mounting height only).
@@ -125,6 +142,9 @@ _SOURCE_LABELS = {
     "triangle": "drop marks",
     "callout_drop": "callout drops",
     "hourglass": "camera marks",
+    "bowtie": "data pole marks",
+    "jhook": "j-hook runs",
+    "stub": "conduit stub marks",
 }
 
 
@@ -234,6 +254,19 @@ def _filter_camera_templates_near_geometry(
         for d in detections
         if not (_is_camera_label(d.symbol) and d.source == "template")
     ]
+
+
+def _data_pole_display_key(legend: SymbolTableInfo) -> str | None:
+    import re
+
+    for entry in legend.entries:
+        display = count_key(entry)
+        if not display:
+            continue
+        blob = f"{display} {entry.description or ''}"
+        if re.search(r"DATA\s+POLE", blob, re.I):
+            return display
+    return None
 
 
 def _camera_display_key(legend: SymbolTableInfo) -> str | None:
@@ -441,8 +474,10 @@ def detect_symbols_raw(
         )
     hash_key = next((display for tag, display in tags if tag == "#"), None)
     camera_key = _camera_display_key(legend)
+    pole_key = _data_pole_display_key(legend)
     meta["hash_key"] = hash_key
     meta["camera_key"] = camera_key
+    meta["pole_key"] = pole_key
     camera_boxes: list[dict[str, Any]] = []
     callout_hints: list[dict[str, Any]] = []
     if hash_key:
@@ -461,6 +496,8 @@ def detect_symbols_raw(
         )
         skip.extend(device_glyph_skip_centers(image, exclude_top_pct=title_band))
         skip.extend(clock_combo_skip_centers(image, exclude_top_pct=title_band))
+        for pole in detect_data_pole_boxes(image, exclude_top_pct=title_band):
+            skip.append((float(pole["cx"]), float(pole["cy"])))
         protect = [(float(h["cx"]), float(h["cy"])) for h in callout_hints]
         drop_boxes, camera_boxes = detect_drop_marks(
             image,
@@ -499,6 +536,21 @@ def detect_symbols_raw(
                         source="hourglass",
                     )
                 )
+        if pole_key:
+            for box in detect_data_pole_boxes(image, exclude_top_pct=title_band):
+                raw_detections.append(
+                    SymbolDetection(
+                        symbol=pole_key,
+                        box=BoundingBox(
+                            x1=box["x1"],
+                            y1=box["y1"],
+                            x2=box["x2"],
+                            y2=box["y2"],
+                        ),
+                        score=0.8,
+                        source="bowtie",
+                    )
+                )
         if hash_key:
             from pipeline.cv.callout_boxes import reinforce_hash_from_callouts
 
@@ -522,6 +574,22 @@ def detect_symbols_raw(
                 )
             )
 
+    elif pole_key:
+        for box in detect_data_pole_boxes(image, exclude_top_pct=title_band):
+            raw_detections.append(
+                SymbolDetection(
+                    symbol=pole_key,
+                    box=BoundingBox(
+                        x1=box["x1"],
+                        y1=box["y1"],
+                        x2=box["x2"],
+                        y2=box["y2"],
+                    ),
+                    score=0.8,
+                    source="bowtie",
+                )
+            )
+
     # Camera templates alone are unreliable (match keynotes / junctions).
     raw_detections = _filter_camera_templates_near_geometry(
         raw_detections, camera_boxes
@@ -529,6 +597,23 @@ def detect_symbols_raw(
     raw_detections = suppress_hourglass_on_triangles(raw_detections)
     raw_detections = suppress_triangles_near_tags(raw_detections)
     raw_detections = suppress_triangles_near_templates(raw_detections)
+    stub_key = conduit_stub_legend_key(legend)
+    if stub_key:
+        for box in detect_conduit_stubs(image, exclude_top_pct=title_band):
+            raw_detections.append(
+                SymbolDetection(
+                    symbol=stub_key,
+                    box=BoundingBox(
+                        x1=box["x1"],
+                        y1=box["y1"],
+                        x2=box["x2"],
+                        y2=box["y2"],
+                    ),
+                    score=0.78,
+                    source="stub",
+                )
+            )
+    raw_detections = reclassify_j_hook_clusters(raw_detections, legend)
     raw_detections = filter_to_legend(raw_detections, valid_keys)
 
     if apply_local_nms:
@@ -644,7 +729,6 @@ def _finalize_counts(
         if llm["ok"] and llm["counts"]:
             disagreements: list[str] = []
             llm_added: list[str] = []
-            llm_notes_l = str(llm.get("notes") or "").lower()
             for key, llm_value in llm["counts"].items():
                 if key not in valid_keys or key in linear_keys:
                     continue
@@ -661,18 +745,13 @@ def _finalize_counts(
                             )
                         continue
                     if folder_vision and mark_n > 0:
-                        # Conservative: only raise # mark count when CV looks
-                        # grossly low and the model notes under-detection.
-                        grossly_low = llm_value >= max(int(mark_n * 1.5), mark_n + 3)
-                        notes_hint = any(
-                            w in llm_notes_l
-                            for w in ("miss", "under", "sparse", "additional", "more")
-                        )
-                        if grossly_low and (notes_hint or llm_value >= mark_n * 2):
+                        # Vision fills CV misses: adopt the higher Gemini count;
+                        # keep CV when the model saw fewer (NMS-merged) marks.
+                        if llm_value > mark_n:
                             counts[key] = llm_value
                             notes.append(
                                 f"Folder vision raised '#' mark count "
-                                f"{mark_n} → {llm_value} (CV looked sparse)."
+                                f"{mark_n} → {llm_value} (Gemini count adopted)."
                             )
                         elif llm_value and llm_value != cv_value:
                             notes.append(

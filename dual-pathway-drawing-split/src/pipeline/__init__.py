@@ -1,0 +1,1 @@
+"""Vision extraction pipeline package."""

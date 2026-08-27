@@ -91,7 +91,12 @@ TESSERACT_CMD = os.getenv("TESSERACT_CMD", "").strip()
 # LLM_PROVIDER: gemini | groq  (gemini preferred for free-tier vision testing)
 LLM_PROVIDER = (os.getenv("LLM_PROVIDER", "groq") or "groq").strip().lower()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.6-flash").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+# Comma-separated fallbacks on 404/429. Gemini 2.5 is retired for many new
+# keys (use 3.5/3.6 Flash). There is no Gemini 2.6.
+GEMINI_FALLBACK_MODEL = os.getenv(
+    "GEMINI_FALLBACK_MODEL", "gemini-3.5-flash,gemini-3.6-flash"
+).strip()
 GEMINI_API_BASE = os.getenv(
     "GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta"
 ).strip().rstrip("/")
@@ -118,7 +123,8 @@ MERGE_EVAL_GLYPH_MIN = _float("MERGE_EVAL_GLYPH_MIN", 0.55)
 MERGE_EVAL_GLYPH_REJECT = _float("MERGE_EVAL_GLYPH_REJECT", 0.45)
 MERGE_EVAL_JUDGE_MIN_SCORE = _float("MERGE_EVAL_JUDGE_MIN_SCORE", 0.65)
 MERGE_EVAL_JUDGE_SOURCES = (
-    os.getenv("MERGE_EVAL_JUDGE_SOURCES", "ocr,template,vision_ocr") or "ocr,template,vision_ocr"
+    os.getenv("MERGE_EVAL_JUDGE_SOURCES", "ocr,template,vision_ocr,vision_detect")
+    or "ocr,template,vision_ocr,vision_detect"
 ).strip().lower()
 MERGE_EVAL_MAX_JUDGE_CALLS = _int("MERGE_EVAL_MAX_JUDGE_CALLS", 80)
 MERGE_EVAL_GEOMETRY_AUTO_ACCEPT = _float("MERGE_EVAL_GEOMETRY_AUTO_ACCEPT", 0.80)
@@ -128,6 +134,11 @@ SYMBOL_COUNT_REQUIRE_MANIFEST_WARN = _bool("SYMBOL_COUNT_REQUIRE_MANIFEST_WARN",
 FOLDER_VISION_COUNT_VERIFY = _bool("FOLDER_VISION_COUNT_VERIFY", True)
 # Per-tile Gemini vision OCR + symbol locate on folder zoom jobs (costly; accurate).
 FOLDER_USE_VISION_OCR = _bool("FOLDER_USE_VISION_OCR", True)
+# Legend glyph crops attached to the vision detect call as visual references.
+VISION_DETECT_MAX_REFS = _int("VISION_DETECT_MAX_REFS", 14)
+# Max vision-detect box side as a fraction of the shorter image side; larger
+# boxes are shrunk around their center so they cannot suppress neighbours.
+VISION_DETECT_MAX_BOX_FRAC = _float("VISION_DETECT_MAX_BOX_FRAC", 0.15)
 CALLOUT_DROP_RADIUS_PX = _float("CALLOUT_DROP_RADIUS_PX", 80.0)
 FOLDER_VISION_429_RETRIES = _int("FOLDER_VISION_429_RETRIES", 1)
 FOLDER_VISION_429_BACKOFF_S = _float("FOLDER_VISION_429_BACKOFF_S", 4.0)

@@ -14,6 +14,10 @@ drawing-zoom-split/storage/jobs/
 drawing-zoom-split/storage/extraction_cache/
 drawing-zoom-split/storage/requirements/
 drawing-zoom-split/storage/technical_symbols/
+dual-pathway-drawing-split/storage/jobs/
+dual-pathway-drawing-split/storage/extraction_cache/
+dual-pathway-drawing-split/storage/requirements/
+dual-pathway-drawing-split/storage/technical_symbols/
 symbol-count-vision/storage/jobs/
 symbol-count-vision/storage/_*/
 
@@ -21,7 +25,6 @@ symbol-count-vision/storage/_*/
 hvac-cost-estimator/
 vision-extraction/
 synthetic_hvac_data/
-dual-pathway-drawing-split/
 Architecture*.png
 *.docx
 setup.ps1

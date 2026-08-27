@@ -227,10 +227,10 @@ def suppress_triangles_near_templates(
     min_center_dist: float = 75.0,
     pad_ratio: float = 1.15,
 ) -> list[SymbolDetection]:
-    """Drop # triangles sitting on any template-matched device glyph."""
+    """Drop # triangles sitting on any template-matched or bowtie device glyph."""
     anchors: list[tuple[float, float, float]] = []
     for det in detections:
-        if det.source != "template":
+        if det.source not in {"template", "bowtie"}:
             continue
         cx = (det.box.x1 + det.box.x2) / 2.0
         cy = (det.box.y1 + det.box.y2) / 2.0

@@ -43,7 +43,8 @@ Edit `.env` and set **only** the keys you use:
 | `GEMINI_API_KEY` | Google AI Studio / Gemini API key |
 | `GROQ_API_KEY` | Groq API key |
 | `LLM_PROVIDER` | `gemini` or `groq` |
-| `GEMINI_MODEL` | e.g. `gemini-2.5-pro` |
+| `GEMINI_MODEL` | Detection/count model. `gemini-2.5-flash` is requested first; this API often returns 404 (retired for new users). There is no Gemini 2.6. Set `GEMINI_FALLBACK_MODEL=gemini-3.5-flash,gemini-3.6-flash`. |
+| `GEMINI_FALLBACK_MODEL` | Comma-separated models tried on 404/429 |
 | `TESSERACT_CMD` | Full path to `tesseract.exe` if not on PATH |
 
 **Never commit `.env`.** It is listed in `.gitignore`.

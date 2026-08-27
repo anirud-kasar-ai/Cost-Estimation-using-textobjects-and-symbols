@@ -1,6 +1,6 @@
 # Setup guide
 
-Two folders only: **drawing-zoom-split** (PDF → zoom tiles) and **symbol-count-vision** (symbol counts).
+Tracked tools: **drawing-zoom-split** and **dual-pathway-drawing-split** (PDF → zoom tiles) plus **symbol-count-vision** (symbol counts).
 
 ## Prerequisites
 
@@ -35,6 +35,8 @@ python scripts/run_batch.py --input "../Real data"
 ```
 
 Optional UI: `python app.py` → http://127.0.0.1:8766
+
+The same drawing-split pipeline also lives in [`dual-pathway-drawing-split/`](dual-pathway-drawing-split/SETUP.md) (`python app.py` → http://127.0.0.1:8766). Copy `.env.example` to `.env` there as well.
 
 ## 3. Symbol count vision
 

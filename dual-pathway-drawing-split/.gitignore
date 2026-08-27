@@ -1,0 +1,47 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+*.pem
+*credentials*
+*secret*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node (frontend)
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Runtime jobs / generated outputs (large)
+storage/jobs/
+storage/extraction_cache/
+storage/requirements/
+storage/technical_symbols/
+storage/*.json
+!storage/jobs/.gitkeep
+!storage/requirements/.gitkeep
+!storage/technical_symbols/.gitkeep
+
+# Scratch / benches
+_bench*/
+_tmp*
+*.log
+*.tmp
+
+# OS / editors
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

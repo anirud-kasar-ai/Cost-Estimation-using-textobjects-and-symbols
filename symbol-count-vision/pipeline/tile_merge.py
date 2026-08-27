@@ -874,7 +874,7 @@ def count_symbols_on_zoom_folder(
 
     for tile_idx, tile in enumerate(tiles):
         image = Image.open(tile.path).convert("RGB")
-        dets, _tile_notes, tile_meta_det = detect_symbols_raw(
+        dets, tile_notes, tile_meta_det = detect_symbols_raw(
             image=image,
             legend=legend,
             glyph_dir=glyph_dir,
@@ -891,6 +891,10 @@ def count_symbols_on_zoom_folder(
                 "Folder detect: per-tile Gemini vision OCR + symbol locate ENABLED "
                 f"({config.llm_model()}) — slower/costlier, higher recall."
             )
+            for n in tile_notes:
+                if "Vision symbol locate skipped" in n or "Vision OCR" in n:
+                    notes.append(f"{tile.path.name}: {n}")
+                    break
         raw_total += len(dets)
         if tile_meta_det.get("linear_keys"):
             meta["linear_keys"] = set(tile_meta_det["linear_keys"]) | set(

@@ -103,6 +103,9 @@ def _is_title_or_keyplan_ocr_span(
     blob = f"{text_upper} {neighbor_blob}".upper()
     if _TITLE_BOILERPLATE_RE.search(blob):
         return True
+    # Lone "E" taken from EAST / A-WING (EAST) is not CONDUIT STUB or a tag.
+    if text_upper == "E" and re.search(r"EAST|\bWING\b", blob):
+        return True
     # Title letters (e.g. G in A-WING) are much taller than wall tags.
     if re.fullmatch(r"[A-Z]", text_upper) and height > max_tag_h * 0.85:
         return True
