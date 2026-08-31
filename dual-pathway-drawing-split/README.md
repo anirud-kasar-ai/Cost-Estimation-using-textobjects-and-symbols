@@ -1,8 +1,8 @@
 # Dual-Pathway Drawing Split
 
-Batch-process construction/architecture PDFs: extract plan pages, crop diagrams, split into per-wing images, and export **653px zoom tiles** (10% overlap) for symbol counting.
+Batch-process construction/architecture PDFs: extract plan pages, crop diagrams, split into per-wing images, and export **588px zoom tiles** (10% overlap).
 
-Standalone project — does not modify `vision-extraction` or `hvac-cost-estimator`.
+This folder is **Stage 1 only**. It does **not** count symbols. Hand zoom folders to [`../symbol-count-vision`](../symbol-count-vision).
 
 ## Docs
 

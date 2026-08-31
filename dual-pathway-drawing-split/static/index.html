@@ -82,14 +82,14 @@
   <header>
     <div>
       <h1>Dual-Pathway Drawing Split</h1>
-      <p>Upload a construction PDF — extract plan pages and split by wing/building.</p>
+      <p>Upload a construction PDF — extract legends, crop wings, and export zoom tiles.</p>
     </div>
     <div class="model" id="health">Checking model…</div>
   </header>
   <main>
     <label class="drop" id="drop">
       <strong>Drop a PDF or drawing image</strong>
-      <span>Output: one image per wing in 04_wings/{WING-NAME}/</span>
+      <span>Output: wing crops + 588px zooms in 04_wings/{WING-NAME}/</span>
       <input id="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" />
     </label>
     <div class="status" id="status">

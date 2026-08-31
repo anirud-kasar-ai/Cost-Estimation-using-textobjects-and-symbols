@@ -53,7 +53,7 @@ Example wing folders from `1948BIDDrawings` (T-020 multi-wing sheet):
 
 ## Notes
 
-- Credentials loaded from local `.env` or sibling `vision-extraction/.env` (no secrets copied).
+- Credentials loaded from local `.env` (no secrets copied).
 - Room tags (B, C prefixes) are used for wing boundary placement only; v1 does not export per-room crops.
 - Non-plan pages (schedules, details, cover) correctly skipped per `summary.json`.
 - ROI/zoom artifacts are written per wing-crop instance as `rois/<page_key>/` and `zooms/<page_key>/` to avoid cross-page overwrites.

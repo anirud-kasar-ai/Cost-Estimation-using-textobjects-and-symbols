@@ -27,3 +27,12 @@ def test_match_span_rejects_partial_tags():
     assert match_span_to_tag("AP-1", tags) == "AP"
     assert match_span_to_tag("APPROVED", tags) is None
     assert match_span_to_tag("R", tags) == "R"
+
+
+def test_match_span_numeric_legend_tag():
+    legend = SymbolTableInfo(
+        entries=[SymbolEntry(symbol="4", description="TYPE 4 DEVICE")]
+    )
+    tags = tagged_legend_keys(legend)
+    assert match_span_to_tag("4", tags) == "4"
+    assert match_span_to_tag("44", tags) is None

@@ -1,9 +1,8 @@
-"""Vision LLM verification for CV symbol counts.
+"""Gemini vision verification for CV symbol counts.
 
-Supports Gemini (default, free-tier friendly) and Groq. The CV pipeline
-produces deterministic counts; this module sends the plan image, legend, and
-CV counts to a multimodal model for review. On any failure the caller keeps
-the CV counts.
+The CV pipeline produces deterministic counts; this module sends the plan
+image, legend glyph artwork, and CV counts to Gemini for review. On any
+failure the caller keeps the CV counts. Groq and Llama are not used.
 """
 
 from __future__ import annotations
@@ -13,10 +12,13 @@ import hashlib
 import json
 import logging
 import re
+import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 from PIL import Image
@@ -26,6 +28,45 @@ from pipeline.cv.tag_match import count_key
 from pipeline.extraction.symbol_table_extractor import SymbolEntry, SymbolTableInfo
 
 logger = logging.getLogger(__name__)
+
+
+class GeminiQuotaError(RuntimeError):
+    """Free-tier quota exhausted; callers should keep CV labels."""
+
+
+_quota_until = 0.0
+_quota_lock = threading.Lock()
+_gemini_call_lock = threading.Lock()
+
+
+def gemini_quota_blocked() -> bool:
+    return time.time() < _quota_until
+
+
+def reset_gemini_quota() -> None:
+    """Tests / a new job can clear the skip window."""
+    global _quota_until
+    _quota_until = 0.0
+
+
+def _trip_gemini_quota() -> None:
+    global _quota_until
+    skip = max(30.0, float(config.GEMINI_QUOTA_SKIP_S))
+    with _quota_lock:
+        _quota_until = max(_quota_until, time.time() + skip)
+    logger.warning(
+        "Gemini quota hit (429). Skipping remaining vision calls for %.0fs; CV labels kept.",
+        skip,
+    )
+
+
+def _taxonomy_rules_for_legend(legend: SymbolTableInfo | None) -> str:
+    from pipeline.taxonomy.builder import taxonomy_from_legend
+    from pipeline.taxonomy.schema import taxonomy_rules_prompt_block
+
+    if legend is None:
+        return "TAXONOMY_CONTEXT_RULES: []"
+    return taxonomy_rules_prompt_block(taxonomy_from_legend(legend))
 
 _SYSTEM_PROMPT = (
     "You are an expert CAD / BIM low-voltage plan reviewer specializing in "
@@ -94,20 +135,17 @@ _ARCHITECT_OCR_EXTRACTION_RULES = [
     "Near raceway prefer 2300/5400/5500 over letter-like misreads; "
     "near device glyphs prefer AP/WP/J over digit look-alikes. "
     "If a boxed digit sits beside a solid triangle, it is a QTY digit — transcribe the digit.",
-    "9. OCR BOUNDING & CONFIDENCE: For EVERY text_entity provide bbox_rel as "
-    "normalized 0.0–1.0 coordinates (origin top-left of the crop) tightly around the "
-    "ink, plus confidence 0–1. Prefer many precise entities over one fused string.",
+    "9. TEXT ONLY: Return transcribed strings. bbox_rel is optional and the pipeline "
+    "ignores any coordinates — this call never supplies detection geometry.",
     "10. DENSE OVERLAP (NO DOUBLE ENTITIES): On zoom tiles, symbols/tags/QTY digits/"
     "pipe callouts (1|5) and elevations (+48) cluster tightly. Emit ONE text_entity "
     "per distinct ink cluster. Do not duplicate the same letters/digits because "
     "leader lines cross them or CV would also see them. Separate a triangle QTY digit "
     "from a nearby pipe tag and from room labels. Skip elevations (+48/+49) and "
     "sheet bubbles (1/D5) entirely.",
-    "11. CAD CONSTRUCTION CONVENTIONS: Solid filled triangles on/near walls are DATA "
-    "PERMANENT LINK drops (#), not arrows — always capture nearby QTY digits. Open "
-    "rectangles on wall lines with 2300/5400/5500 are surface raceway. Boxed lone '1' "
-    "keynotes and '+48' heights are not equipment tags. Map digits-only raceway labels "
-    "to the matching WM series without inventing the letters WM.",
+    "11. Do not invent equipment from room codes, elevations (+48), title text, or "
+    "KEY PLAN insets. Context / look-alike geometry is defined only in "
+    "TAXONOMY_CONTEXT_RULES when that block is attached — do not restate those rules.",
 ]
 
 
@@ -182,15 +220,13 @@ def _build_prompt(
         "  underground conduit) are NEVER counted as discrete glyph counts — always 0",
         "  for those keys (raceway TEXT labels like 2300 are still counted under SURFACE",
         "  RACEWAY keys when that key is a text/OCR entry, not [LINEAR]).",
-        "- J-HOOK, CONDUIT STUB, and DATA POLE are discrete look-alikes — count them",
-        "  using the LOOK-ALIKE rules (do not zero them as linear runs).",
+        "- Discrete keys with count_semantics cluster_as_one / discrete stay countable.",
         "- NEVER invent counts for keys marked [LINEAR — always 0].",
         "- Watch OCR look-alikes: O/0, I/1, S/5, B/8, Z/2 — prefer legend-consistent reads.",
         "- The CV counts / detection hints below are location aids; correct over-counts",
-        "  from overlapping boxes and fill clear misses (especially missed '#' triangles",
-        "  and missed 5400/2300 raceway labels on dense wall runs).",
+        "  from overlapping boxes. Do not invent instances without visible ink.",
         "",
-        _LOOKALIKE_CONFUSION_TABLE,
+        _taxonomy_rules_for_legend(legend),
     ]
     for block in extra_rules or []:
         if block and str(block).strip():
@@ -260,22 +296,6 @@ def _extract_json(text: str) -> dict[str, Any] | None:
     return None
 
 
-def _call_groq(payload: dict[str, Any]) -> dict[str, Any]:
-    body = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        config.GROQ_API_URL,
-        data=body,
-        headers={
-            "Authorization": f"Bearer {config.GROQ_API_KEY}",
-            "Content-Type": "application/json",
-            "User-Agent": "symbol-count-vision/0.2 (python-urllib)",
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=config.LLM_TIMEOUT_S) as resp:
-        return json.loads(resp.read().decode("utf-8"))
-
-
 def _reference_image_parts_gemini(
     reference_images: list[tuple[str, str]] | None,
 ) -> list[dict[str, Any]]:
@@ -293,12 +313,16 @@ def _reference_image_parts_gemini(
     return parts
 
 
-def _post_gemini(
-    model: str,
-    payload: dict[str, Any],
-    *,
-    retry_429: bool = True,
-) -> dict[str, Any]:
+def _generation_config(*, max_output_tokens: int) -> dict[str, Any]:
+    """Deterministic JSON for classify/judge. Pro thinking still fits in 8k."""
+    return {
+        "temperature": 0.0,
+        "maxOutputTokens": max(512, int(max_output_tokens)),
+        "responseMimeType": "application/json",
+    }
+
+
+def _post_gemini(model: str, payload: dict[str, Any]) -> dict[str, Any]:
     url = (
         f"{config.GEMINI_API_BASE}/models/{urllib.parse.quote(model, safe='')}"
         f":generateContent?key={urllib.parse.quote(config.GEMINI_API_KEY)}"
@@ -308,26 +332,25 @@ def _post_gemini(
         "Content-Type": "application/json",
         "User-Agent": "symbol-count-vision/0.2 (python-urllib)",
     }
-    # 503: free-tier Flash briefly overloaded — short retry.
-    # 429 (when retried): usually a per-minute token window — wait it out,
-    # since folder jobs fire many image-heavy calls back to back.
+    # 503: brief overload — one short retry. Never wait on 429 (quota);
+    # retrying burns minutes and the fallback model shares the same limit.
     last_exc: Exception | None = None
-    for attempt in range(3):
+    for attempt in range(2):
         request = urllib.request.Request(url, data=body, headers=headers, method="POST")
         try:
             with urllib.request.urlopen(request, timeout=config.LLM_TIMEOUT_S) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             last_exc = exc
-            retriable = exc.code == 503 or (exc.code == 429 and retry_429)
-            if not retriable or attempt == 2:
-                raise
-            import time
-
             if exc.code == 429:
-                time.sleep(20.0 * (attempt + 1))
-            else:
-                time.sleep(2.0 * (attempt + 1))
+                _trip_gemini_quota()
+                raise GeminiQuotaError(
+                    f"HTTP 429 quota on {model}"
+                ) from exc
+            retriable = exc.code == 503
+            if not retriable or attempt == 1:
+                raise
+            time.sleep(1.0)
     assert last_exc is not None
     raise last_exc
 
@@ -359,13 +382,20 @@ def _stamp_model(result: dict[str, Any]) -> None:
 
 
 def _gemini_generate(payload: dict[str, Any]) -> dict[str, Any]:
-    """POST to Gemini 2.5 Flash, then fallbacks, on 404/429.
-
-    Primary is GEMINI_MODEL (gemini-2.5-flash). There is no Gemini 2.6; if
-    2.5-flash is quota-blocked we try GEMINI_FALLBACK_MODEL (comma-separated).
-    """
+    """POST to Gemini. 404 falls back to the next model; 429 skips the rest."""
     global _PRIMARY_SKIP_UNTIL, _LAST_GEMINI_MODEL
-    import time
+
+    if gemini_quota_blocked():
+        raise GeminiQuotaError("Gemini quota skipped")
+
+    with _gemini_call_lock:
+        if gemini_quota_blocked():
+            raise GeminiQuotaError("Gemini quota skipped")
+        return _gemini_generate_locked(payload)
+
+
+def _gemini_generate_locked(payload: dict[str, Any]) -> dict[str, Any]:
+    global _PRIMARY_SKIP_UNTIL, _LAST_GEMINI_MODEL
 
     primary = config.GEMINI_MODEL
     fallbacks = _fallback_models(primary)
@@ -376,35 +406,41 @@ def _gemini_generate(payload: dict[str, Any]) -> dict[str, Any]:
                 response = _post_gemini(model, payload)
                 _LAST_GEMINI_MODEL = model
                 return response
+            except GeminiQuotaError:
+                raise
             except urllib.error.HTTPError as exc:
                 last_exc = exc
-                if exc.code not in {404, 429}:
+                if exc.code != 404:
                     raise
         if last_exc is not None:
             raise last_exc
     try:
-        response = _post_gemini(primary, payload, retry_429=not bool(fallbacks))
+        response = _post_gemini(primary, payload)
         _LAST_GEMINI_MODEL = primary
         return response
+    except GeminiQuotaError:
+        raise
     except urllib.error.HTTPError as exc:
-        if exc.code not in {404, 429} or not fallbacks:
+        if exc.code != 404 or not fallbacks:
             raise
         _PRIMARY_SKIP_UNTIL = time.time() + _PRIMARY_SKIP_S
         last_exc = exc
-        for model in fallbacks:
+        for i, model in enumerate(fallbacks):
             logger.warning(
                 "Gemini model %s failed (HTTP %s); trying %s",
-                primary if model == fallbacks[0] else _LAST_GEMINI_MODEL or primary,
-                exc.code if model == fallbacks[0] else getattr(last_exc, "code", "?"),
+                primary if i == 0 else _LAST_GEMINI_MODEL or primary,
+                exc.code if i == 0 else getattr(last_exc, "code", "?"),
                 model,
             )
             try:
                 response = _post_gemini(model, payload)
                 _LAST_GEMINI_MODEL = model
                 return response
+            except GeminiQuotaError:
+                raise
             except urllib.error.HTTPError as inner:
                 last_exc = inner
-                if inner.code not in {404, 429}:
+                if inner.code != 404:
                     raise
         raise last_exc
 
@@ -422,11 +458,7 @@ def _call_gemini(
     payload = {
         "systemInstruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
         "contents": [{"role": "user", "parts": parts}],
-        "generationConfig": {
-            "temperature": 0.1,
-            "maxOutputTokens": 4096,
-            "responseMimeType": "application/json",
-        },
+        "generationConfig": _generation_config(max_output_tokens=8192),
     }
     return _gemini_generate(payload)
 
@@ -474,8 +506,9 @@ def verify_counts_with_llm(
     extra_rules: list[str] | None = None,
     detection_hints: list[dict[str, Any]] | None = None,
     extra_429_retries: int | None = None,
+    taxonomy: Any | None = None,
 ) -> dict[str, Any]:
-    """Ask the configured vision model to review CV counts.
+    """Ask Gemini to review CV counts against the legend glyph artwork.
 
     Returns {"ok": bool, "counts": {...} | None, "model": str,
              "provider": str, "notes": str | None, "error": str | None}.
@@ -493,9 +526,12 @@ def verify_counts_with_llm(
     }
     if not config.llm_enabled():
         result["error"] = (
-            "LLM verification disabled (no API key for "
-            f"{provider}, or SYMBOL_COUNT_USE_LLM=false)."
+            "LLM verification disabled (no GEMINI_API_KEY, or "
+            "SYMBOL_COUNT_USE_LLM=false)."
         )
+        return result
+    if gemini_quota_blocked():
+        result["error"] = "Gemini quota skipped; CV counts kept."
         return result
 
     valid_keys = {
@@ -503,11 +539,11 @@ def verify_counts_with_llm(
         for e in legend.entries
         if count_key(e)
     }
-    # Text shape descriptions from the uploaded sheet — do NOT attach glyph
-    # JPEGs here. Count-verify already sends the (often huge) full-wing image;
-    # extra reference images blow the Gemini input-token quota and the whole
-    # call is skipped (glyphs never reach the model).
-    reference_images: list[tuple[str, str]] = []
+    reference_images = _legend_reference_images(
+        legend,
+        linear_keys or set(),
+        taxonomy=taxonomy,
+    )
     glyph_descs = cached_glyph_descriptions(legend, linear_keys or set())
     prompt = _build_prompt(
         legend,
@@ -529,49 +565,16 @@ def verify_counts_with_llm(
 
     for attempt in range(retries + 1):
         try:
-            if provider == "gemini":
-                response = _call_gemini(
-                    image_b64, prompt, reference_images=reference_images
-                )
-                content = _gemini_text(response)
-            else:
-                user_content: list[dict[str, Any]] = [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
-                    },
-                ]
-                for label, ref_b64 in reference_images:
-                    user_content.append(
-                        {
-                            "type": "text",
-                            "text": (
-                                f"REFERENCE GLYPH — legend key {label!r} "
-                                "(legend artwork only, NOT part of the plan):"
-                            ),
-                        }
-                    )
-                    user_content.append(
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"},
-                        }
-                    )
-                payload = {
-                    "model": config.GROQ_MODEL,
-                    "temperature": 0.1,
-                    "max_completion_tokens": 4096,
-                    "reasoning_effort": "none",
-                    "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
-                        {"role": "user", "content": user_content},
-                    ],
-                }
-                response = _call_groq(payload)
-                content = response["choices"][0]["message"]["content"]
+            response = _call_gemini(
+                image_b64, prompt, reference_images=reference_images
+            )
+            content = _gemini_text(response)
             last_http = None
             break
+        except GeminiQuotaError as exc:
+            result["error"] = f"{provider} quota skipped. CV counts kept. {exc}"
+            logger.warning("LLM verification skipped: %s", result["error"])
+            return result
         except urllib.error.HTTPError as exc:
             last_http = exc
             if exc.code == 429 and attempt < retries:
@@ -584,8 +587,7 @@ def verify_counts_with_llm(
                 pass
             if exc.code == 429:
                 result["error"] = (
-                    f"{provider} API HTTP 429 (quota). CV counts kept — "
-                    "retry later or set LLM_PROVIDER=groq. "
+                    f"{provider} API HTTP 429 (quota). CV counts kept. "
                     f"{detail or exc.reason}"
                 )
             else:
@@ -668,12 +670,11 @@ def _build_judge_prompt(symbol_key: str, entry: SymbolEntry | None) -> str:
         "  targets. Reject pure architectural length dimensions and elevations (+48).",
         "- OCR text-only hits must match the expected tag or part digits to count.",
         "- Be strict on blank/ambiguous crops; when unsure, set present=false.",
-        "- Prefer legend context over look-alike OCR swaps (O/0, I/1, S/5, B/8).",
-        "- Is this crop the FULL glyph for the target key, not a fragment shared with",
-        "  another legend row? (E≠stub unless long middle bar; one J≠j-hook; triangle",
-        "  inside AP/pole/camera ≠ '#' drop).",
+        "- Prefer legend context over OCR swaps (O/0, I/1, S/5, B/8).",
         "",
-        _LOOKALIKE_CONFUSION_TABLE,
+        _taxonomy_rules_for_legend(
+            SymbolTableInfo(entries=[entry]) if entry is not None else None
+        ),
     ]
     return "\n".join(lines)
 
@@ -699,48 +700,36 @@ def judge_detection_crop(
     if not config.llm_enabled():
         result["error"] = "LLM disabled"
         return result
+    if gemini_quota_blocked():
+        result["error"] = "HTTP 429 quota skipped"
+        return result
 
     prompt = _build_judge_prompt(symbol_key, entry)
     crop_b64 = _encode_image(crop)
     glyph_b64 = _encode_image(glyph) if glyph is not None else None
 
     try:
-        if provider == "gemini":
-            parts: list[dict[str, Any]] = [{"text": prompt}, {"inline_data": {"mime_type": "image/jpeg", "data": crop_b64}}]
-            if glyph_b64:
-                parts.append({"inline_data": {"mime_type": "image/jpeg", "data": glyph_b64}})
-            payload = {
-                "systemInstruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
-                "contents": [{"role": "user", "parts": parts}],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "maxOutputTokens": 512,
-                    "responseMimeType": "application/json",
-                },
-            }
-            response = _gemini_generate(payload)
-            content = _gemini_text(response)
-        else:
-            user_content: list[dict[str, Any]] = [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{crop_b64}"}},
-            ]
-            if glyph_b64:
-                user_content.append(
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{glyph_b64}"}}
-                )
-            payload = {
-                "model": config.GROQ_MODEL,
-                "temperature": 0.1,
-                "max_completion_tokens": 512,
-                "reasoning_effort": "none",
-                "messages": [
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": user_content},
-                ],
-            }
-            response = _call_groq(payload)
-            content = response["choices"][0]["message"]["content"]
+        parts: list[dict[str, Any]] = [
+            {"text": prompt},
+            {"inline_data": {"mime_type": "image/jpeg", "data": crop_b64}},
+        ]
+        if glyph_b64:
+            parts.append(
+                {
+                    "text": (
+                        f"REFERENCE GLYPH — legend key {symbol_key!r} "
+                        "(legend artwork only, NOT part of the plan):"
+                    )
+                }
+            )
+            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": glyph_b64}})
+        payload = {
+            "systemInstruction": {"parts": [{"text": _SYSTEM_PROMPT}]},
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": _generation_config(max_output_tokens=1024),
+        }
+        response = _gemini_generate(payload)
+        content = _gemini_text(response)
     except Exception as exc:  # noqa: BLE001
         result["error"] = str(exc)
         return result
@@ -849,77 +838,27 @@ def _call_vision_json(
     max_tokens: int = 4096,
     reference_images: list[tuple[str, str]] | None = None,
 ) -> tuple[str | None, str | None]:
-    """Call configured vision provider; return (content, error).
+    """Call Gemini vision; return (content, error).
 
     ``reference_images`` is a list of (label, jpeg_b64) legend glyph crops
     attached AFTER the plan image so the model does visual matching against
-    the exact legend artwork instead of generative detection.
+    the exact legend artwork instead of guessing from text.
     """
-    provider = config.llm_provider()
     try:
-        if provider == "gemini":
-            parts: list[dict[str, Any]] = [
-                {"text": prompt},
-                {"inline_data": {"mime_type": "image/jpeg", "data": image_b64}},
-            ]
-            for label, ref_b64 in reference_images or []:
-                parts.append(
-                    {
-                        "text": (
-                            f"REFERENCE GLYPH — legend key {label!r} "
-                            "(legend artwork only, NOT part of the plan):"
-                        )
-                    }
-                )
-                parts.append(
-                    {"inline_data": {"mime_type": "image/jpeg", "data": ref_b64}}
-                )
-            payload = {
-                "systemInstruction": {"parts": [{"text": system_prompt}]},
-                "contents": [{"role": "user", "parts": parts}],
-                "generationConfig": {
-                    "temperature": 0.1,
-                    "maxOutputTokens": max_tokens,
-                    "responseMimeType": "application/json",
-                },
-            }
-            response = _gemini_generate(payload)
-            return _gemini_text(response), None
-        user_content: list[dict[str, Any]] = [
-            {"type": "text", "text": prompt},
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
-            },
+        parts: list[dict[str, Any]] = [
+            {"text": prompt},
+            {"inline_data": {"mime_type": "image/jpeg", "data": image_b64}},
         ]
-        for label, ref_b64 in reference_images or []:
-            user_content.append(
-                {
-                    "type": "text",
-                    "text": (
-                        f"REFERENCE GLYPH — legend key {label!r} "
-                        "(legend artwork only, NOT part of the plan):"
-                    ),
-                }
-            )
-            user_content.append(
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{ref_b64}"},
-                }
-            )
+        parts.extend(_reference_image_parts_gemini(reference_images))
         payload = {
-            "model": config.GROQ_MODEL,
-            "temperature": 0.1,
-            "max_completion_tokens": max_tokens,
-            "reasoning_effort": "none",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": _generation_config(max_output_tokens=max_tokens),
         }
-        response = _call_groq(payload)
-        return str(response["choices"][0]["message"]["content"]), None
+        response = _gemini_generate(payload)
+        return _gemini_text(response), None
+    except GeminiQuotaError as exc:
+        return None, str(exc)
     except urllib.error.HTTPError as exc:
         detail = ""
         try:
@@ -939,6 +878,7 @@ _PRIORITY_REF_KEYS = (
     "CONDUIT STUB",
     "J-HOOK (SINGLE/STACKED)",
     "NETWORK CAMERA",
+    "DATA POLE",
     "J",
     "G",
     "R",
@@ -970,54 +910,121 @@ def _ref_sort_key(key: str) -> tuple[int, str]:
         return (100, key)
 
 
+def _encode_glyph_png(png: bytes) -> str | None:
+    try:
+        img = Image.open(BytesIO(png)).convert("RGB")
+    except OSError:
+        return None
+    if max(img.size) < 96:
+        scale = 96 / max(img.size)
+        img = img.resize(
+            (max(1, int(img.width * scale)), max(1, int(img.height * scale))),
+            Image.LANCZOS,
+        )
+    return _encode_image(img)
+
+
+def _collect_glyph_pngs(
+    legend: SymbolTableInfo | None,
+    taxonomy: Any | None,
+) -> dict[str, bytes]:
+    """Legend in-memory PNG first, then taxonomy bytes / on-disk glyph crops."""
+    out: dict[str, bytes] = {}
+    if legend is not None:
+        for entry in legend.entries:
+            key = count_key(entry)
+            if not key or key in out:
+                continue
+            png = entry.symbol_image_png
+            if png:
+                out[key] = png
+    if taxonomy is None:
+        return out
+    for entry in getattr(taxonomy, "entries", []) or []:
+        key = str(getattr(entry, "key", "") or "")
+        if not key or key in out:
+            continue
+        png = getattr(entry, "glyph_png", None)
+        if png:
+            out[key] = png
+            continue
+        path = str(getattr(entry, "glyph_crop_path", "") or "")
+        if not path:
+            continue
+        file_path = Path(path)
+        if not file_path.is_file():
+            continue
+        try:
+            out[key] = file_path.read_bytes()
+        except OSError:
+            continue
+    return out
+
+
 def _legend_reference_images(
-    legend: SymbolTableInfo,
+    legend: SymbolTableInfo | None,
     linear_keys: set[str],
     *,
     max_refs: int | None = None,
+    taxonomy: Any | None = None,
+    prefer_keys: list[str] | None = None,
 ) -> list[tuple[str, str]]:
     """(display_key, jpeg_b64) for legend rows carrying real glyph artwork.
 
     These come from the uploaded technical-symbol PDF (or the symbol library)
-    and are attached to the detect call so the model matches shapes visually
-    instead of guessing from text descriptions.
+    and are attached to classify and count-verify so Gemini matches shapes
+    visually instead of guessing from text descriptions.
 
-    Linear glyphs (raceway/conduit linework) are never attached: they do not
-    match plan marks and they inflate Gemini input tokens until the call 429s.
+    Linear glyphs (raceway/conduit linework) are never attached except
+    look-alikes Gemini must see (stub, J-hook) and keys in ``prefer_keys``.
     Discrete device glyphs (#, AP, cameras, letter tags) are attached first.
     """
     from pipeline.cv.template_match import LINEAR_GLYPH_RE
 
     limit = int(max_refs if max_refs is not None else config.VISION_DETECT_MAX_REFS)
+    pngs = _collect_glyph_pngs(legend, taxonomy)
+    prefer = [k for k in (prefer_keys or []) if k in pngs]
+    prefer_index = {k: i for i, k in enumerate(prefer)}
+    tax_by_key = {}
+    if taxonomy is not None:
+        for entry in getattr(taxonomy, "entries", []) or []:
+            key = str(getattr(entry, "key", "") or "")
+            if key:
+                tax_by_key[key] = entry
+
+    def include(key: str) -> bool:
+        if key in prefer_index:
+            return True
+        if _FORCE_GLYPH_REF_RE.search(key):
+            return True
+        if key in linear_keys:
+            return False
+        tax_entry = tax_by_key.get(key)
+        if (
+            tax_entry is not None
+            and getattr(tax_entry, "count_semantics", "") == "linear_suppressed"
+        ):
+            return False
+        if LINEAR_GLYPH_RE.search(key) and key != "#":
+            return False
+        return True
+
     candidates: list[tuple[str, str]] = []
-    seen: set[str] = set()
-    for entry in legend.entries:
-        key = count_key(entry)
-        if not key or key in seen:
+    for key, png in pngs.items():
+        if not include(key):
             continue
-        force_ref = bool(_FORCE_GLYPH_REF_RE.search(key))
-        if not force_ref:
-            if key in linear_keys:
-                continue
-            if LINEAR_GLYPH_RE.search(key) and (entry.symbol or "").strip() != "#":
-                continue
-        png = entry.symbol_image_png
-        if not png:
-            continue
-        try:
-            img = Image.open(BytesIO(png)).convert("RGB")
-        except OSError:
-            continue
-        # Upscale tiny glyph crops so the shape is legible to the model.
-        if max(img.size) < 96:
-            scale = 96 / max(img.size)
-            img = img.resize(
-                (max(1, int(img.width * scale)), max(1, int(img.height * scale))),
-                Image.LANCZOS,
-            )
-        candidates.append((key, _encode_image(img)))
-        seen.add(key)
-    candidates.sort(key=lambda item: _ref_sort_key(item[0]))
+        jpeg = _encode_glyph_png(png)
+        if jpeg:
+            candidates.append((key, jpeg))
+
+    def sort_item(item: tuple[str, str]) -> tuple:
+        key = item[0]
+        if key in prefer_index:
+            return (0, prefer_index[key])
+        pri, name = _ref_sort_key(key)
+        return (1, pri, name)
+
+    candidates.sort(key=sort_item)
     return candidates[: max(0, limit)]
 
 
@@ -1136,258 +1143,6 @@ def describe_legend_glyphs_with_llm(
     return descs
 
 
-_LOOKALIKE_CONFUSION_TABLE = """
-LOOK-ALIKE GLYPHS (mandatory — do not confuse fragments):
-- CONDUIT STUB = capital E whose MIDDLE bar is much longer than the top/bottom,
-  sitting on conduit. A plain letter E, room code A-6E, or the word EAST is NOT a stub.
-- J-HOOK = two or more letter J's on ONE horizontal line (—J—J—J—). That cluster is
-  ONE j-hook run, never JUNCTION BOX. JUNCTION BOX is a single boxed/standalone J.
-- '#' DATA DROP = a STANDALONE filled triangle + optional digit. A filled triangle
-  INSIDE a circle-crosshair is AP (not #). Inside a square bowtie/X it is DATA POLE
-  (not #). Two opposing triangles + X-box is ONE NETWORK CAMERA (not two # drops).
-  A filled triangle sitting on a hollow camera body rectangle is the camera glyph.
-""".strip()
-
-# Failure modes seen on real bid-set tiles — the model must never report these.
-_DETECT_NEGATIVE_LIST = [
-    "room labels / space IDs (A-1, A-2, A-6E, RR/B, C-5B, 1.03-in-circle)",
-    "wing titles and sheet text (A-WING (EAST), TECHNOLOGY FLOOR PLANS …)",
-    "KEY PLAN inset and everything inside it",
-    "dimension lines, dimension text, leader lines, grid bubbles, scale bars",
-    "elevation heights +48 / +49 (mounting height AFF, never equipment)",
-    "hexagon / square keynote bubbles containing only a digit",
-    "door swings, doors, windows, furniture outlines, plumbing fixtures",
-    "wall hatch, break-line zigzags, north arrows",
-    "general note text, title block, legend table printed on the sheet",
-    "pipe callouts (1|5, 1|13) as standalone symbols — they only locate '#' drops",
-    "plain letter E / EAST / A-6E as CONDUIT STUB",
-    "a single J that is part of a —J—J—J— j-hook run as JUNCTION BOX",
-    "filled triangle inside AP circle, DATA POLE bowtie, or camera hourglass as '#'",
-]
-
-
-def detect_legend_symbols_with_llm(
-    image: Image.Image,
-    legend: SymbolTableInfo,
-    *,
-    linear_keys: set[str] | None = None,
-    max_instances: int = 80,
-) -> dict[str, Any]:
-    """Visual-match legend symbols on a plan crop (not generative detection).
-
-    The prompt enumerates the literal legend (VALID_SYMBOLS) and the call
-    attaches the actual legend glyph crops as reference images. Detections
-    that do not name a legend key are dropped; oversized boxes are clamped
-    so they cannot suppress neighbouring symbols during NMS.
-
-    Returns {"ok": bool, "detections": [{"symbol", "x1", "y1", ...}],
-             "error": str|None, "model": str, "provider": str}.
-    """
-    linear_keys = linear_keys or set()
-    provider = config.llm_provider()
-    result: dict[str, Any] = {
-        "ok": False,
-        "detections": [],
-        "error": None,
-        "model": config.llm_model(),
-        "provider": provider,
-    }
-    if not config.llm_enabled():
-        result["error"] = "LLM disabled"
-        return result
-
-    reference_images = _legend_reference_images(legend, linear_keys)
-    ref_keys = {label for label, _b64 in reference_images}
-    # One cached call per uploaded technical-symbol sheet: shape description
-    # for every glyph, injected below so the model knows what to match.
-    glyph_descs = describe_legend_glyphs_with_llm(
-        legend, linear_keys, reference_images=reference_images
-    )
-    try:
-        from pipeline.legend_reference import lookup_descriptions_for_legend
-
-        stored = lookup_descriptions_for_legend(legend)
-        glyph_descs = {**stored, **glyph_descs}
-    except Exception:  # noqa: BLE001
-        pass
-
-    valid_symbols: list[dict[str, Any]] = []
-    valid: set[str] = set()
-    for entry in legend.entries:
-        key = count_key(entry)
-        if not key or key in valid:
-            continue
-        valid.add(key)
-        valid_symbols.append(
-            {
-                "name": key,
-                "glyph": glyph_descs.get(key),
-                "tag": (entry.symbol or "").strip() or None,
-                "part": (entry.part_number or "").strip() or None,
-                "description": (entry.description or "").strip() or None,
-                "reference_image_attached": key in ref_keys,
-                "linear_never_box": key in linear_keys,
-            }
-        )
-    if not valid_symbols:
-        result["error"] = "Empty legend"
-        return result
-
-    prompt = "\n".join(
-        [
-            "TASK: visual matching of EXACT legend symbols on a CAD zoom tile.",
-            "This is NOT open-ended detection. You may ONLY report marks that match",
-            "one of the VALID_SYMBOLS below, by shape (glyphs) or exact letters/digits",
-            "(tags / part labels). If a mark does not clearly match one of these exact",
-            "entries, DO NOT report it — do not invent new categories.",
-            "",
-            "VALID_SYMBOLS (the ONLY reportable keys — copy 'name' EXACTLY):",
-            json.dumps(valid_symbols, ensure_ascii=False, indent=1),
-            "",
-            "After the plan image, each entry with reference_image_attached=true has its",
-            "actual legend artwork attached, labeled with its key. Those reference images",
-            "are the ground truth for what each glyph looks like — match against them.",
-            "They are NOT part of the plan; never count the reference images themselves.",
-            "",
-            "Return JSON only:",
-            '{"detections":[{"symbol":"<name>","kind":"tag|drop|device|raceway|camera|other",'
-            '"qty":1,"confidence":0.0,"bbox_rel":{"x1":0,"y1":0,"x2":0,"y2":0}}],'
-            '"notes":"<short>"}',
-            "",
-            "MATCHING RULES (strict):",
-            "- GLYPH keys: the drawn SHAPE on the plan must match the attached reference",
-            "  glyph. Printed words or numbers alone are NEVER a glyph match — text is",
-            "  not a symbol.",
-            "- TAG keys (J, AP, WP, …): the exact letters must be inked on the plan,",
-            "  not part of a longer word or a room code.",
-            "- PART keys (2300/5400/5500 → WMxxxx): digits next to raceway linework only.",
-            "- '#' DATA DROP: on the PLAN this is ONLY a STANDALONE solid FILLED triangle",
-            "  (any direction) plus an optional digit 1–9 beside it (that digit is qty).",
-            "  The legend-table crop may also show a '#' character under the triangle —",
-            "  that character is the table's KEY COLUMN, not drawn next to plan drops.",
-            "  Never require a hash character on the plan. Not a door-swing or north arrow.",
-            "- AP: on the PLAN match the circled crosshair (letters AP may sit under it",
-            "  or be missing). The triangle INSIDE that circle is part of AP, not a '#' drop.",
-            "- DATA POLE: square with opposing filled triangles (bowtie / X). Those inner",
-            "  triangles are NOT '#' drops.",
-            "- NETWORK CAMERA: hourglass (two opposing triangles + X-box) = ONE camera,",
-            "  not two '#' drops. A filled triangle on a hollow camera-body rectangle is",
-            "  the camera glyph, not a drop.",
-            "- JUNCTION BOX (tag J): a single boxed or standalone letter J.",
-            "- J-HOOK: two or more J's on one horizontal line (—J—J—J—) = one hook run,",
-            "  never count those letters as JUNCTION BOX.",
-            "- CONDUIT STUB: E-shape with a LONG middle bar on conduit. Plain E / EAST /",
-            "  A-6E is not a stub.",
-            "- IP CLOCK/SPEAKER: horn/speaker glyph with '12:00' text.",
-            "- Skip every linear_never_box=true key entirely (continuous conduit/raceway/",
-            "  ladder-rack runs). J-HOOK, CONDUIT STUB, and DATA POLE are discrete — report them.",
-            "- When unsure whether ink matches a legend entry, leave it out. Precision",
-            "  beats recall; a wrong box corrupts counts downstream.",
-            "",
-            _LOOKALIKE_CONFUSION_TABLE,
-            "",
-            "NEGATIVE LIST — NEVER report any of these as detections:",
-            *[f"- {item}" for item in _DETECT_NEGATIVE_LIST],
-            "",
-            "BOX RULES (critical — bad boxes disturb neighbouring symbols):",
-            "- bbox_rel is normalized 0–1 of the PLAN image (origin top-left).",
-            "- One box = ONE symbol's ink, drawn TIGHT. Never emit a large box covering",
-            "  several symbols, a wall run, or a whole room — if symbols cluster, emit",
-            "  one small tight box per symbol instance.",
-            "- A box wider/taller than ~10% of the image is almost certainly wrong for",
-            "  a single glyph; shrink it to the symbol's ink.",
-            f"- Cap at {max_instances} detections.",
-        ]
-    )
-    image_b64 = _encode_image(image)
-    content, err = _call_vision_json(
-        prompt=prompt,
-        image_b64=image_b64,
-        system_prompt=_SYSTEM_PROMPT,
-        max_tokens=8192,
-        reference_images=reference_images,
-    )
-    if err:
-        result["error"] = err
-        return result
-    parsed = _extract_json(str(content or ""))
-    if not parsed or not isinstance(parsed.get("detections"), list):
-        result["error"] = "Model reply was not valid detections JSON."
-        return result
-
-    img_w, img_h = image.size
-    # A single legend glyph on a 653–768px zoom tile is ~12–60px. Clamp anything
-    # bigger so one loose vision box cannot swallow neighbouring symbols in NMS.
-    max_side = max(28.0, float(config.VISION_DETECT_MAX_BOX_FRAC) * min(img_w, img_h))
-
-    def _clamp_span(a: float, b: float, upper: float) -> tuple[float, float, bool]:
-        if b - a <= max_side:
-            return a, b, False
-        center = (a + b) / 2.0
-        half = max_side / 2.0
-        return max(0.0, center - half), min(upper, center + half), True
-
-    out: list[dict[str, Any]] = []
-    clamped_n = 0
-    for item in parsed["detections"]:
-        if not isinstance(item, dict):
-            continue
-        symbol = str(item.get("symbol") or "").strip()
-        if symbol not in valid or symbol in linear_keys:
-            continue
-        bbox = item.get("bbox_rel")
-        if not isinstance(bbox, dict):
-            continue
-        try:
-            x1 = float(bbox["x1"]) * img_w
-            y1 = float(bbox["y1"]) * img_h
-            x2 = float(bbox["x2"]) * img_w
-            y2 = float(bbox["y2"]) * img_h
-        except (KeyError, TypeError, ValueError):
-            continue
-        xa, xb = sorted((x1, x2))
-        ya, yb = sorted((y1, y2))
-        if xb - xa < 2 or yb - ya < 2:
-            continue
-        xa, xb, cx_clamped = _clamp_span(xa, xb, float(img_w))
-        ya, yb, cy_clamped = _clamp_span(ya, yb, float(img_h))
-        if cx_clamped or cy_clamped:
-            clamped_n += 1
-        try:
-            conf = float(item.get("confidence", 0.7))
-        except (TypeError, ValueError):
-            conf = 0.7
-        try:
-            qty = max(1, int(item.get("qty") or 1))
-        except (TypeError, ValueError):
-            qty = 1
-        out.append(
-            {
-                "symbol": symbol,
-                "kind": str(item.get("kind") or "other"),
-                "qty": qty,
-                "confidence": max(0.0, min(1.0, conf)),
-                "x1": xa,
-                "y1": ya,
-                "x2": xb,
-                "y2": yb,
-            }
-        )
-        if len(out) >= max_instances:
-            break
-
-    result["ok"] = True
-    _stamp_model(result)
-    result["detections"] = out
-    result["reference_glyphs_attached"] = len(reference_images)
-    if glyph_descs:
-        result["glyph_descriptions"] = glyph_descs
-    if clamped_n:
-        result["clamped_boxes"] = clamped_n
-    note = parsed.get("notes")
-    if isinstance(note, str) and note.strip():
-        result["notes"] = note.strip()[:400]
-    return result
 
 
 def parse_crop_text_with_llm(
@@ -1450,11 +1205,13 @@ def parse_crop_text_with_llm(
 
 
 __all__ = [
+    "GeminiQuotaError",
     "architect_ocr_prompt_spec",
     "cached_glyph_descriptions",
     "describe_legend_glyphs_with_llm",
-    "detect_legend_symbols_with_llm",
+    "gemini_quota_blocked",
     "judge_detection_crop",
     "parse_crop_text_with_llm",
+    "reset_gemini_quota",
     "verify_counts_with_llm",
 ]

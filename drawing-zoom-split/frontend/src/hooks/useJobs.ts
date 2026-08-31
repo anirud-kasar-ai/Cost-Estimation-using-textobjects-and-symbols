@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { getJob, listJobs, uploadPdf, fetchSymbolCountReport } from '../api/client';
-import type { JobDetail, SymbolCountStatus } from '../types';
+import { getJob, listJobs, uploadPdf } from '../api/client';
+import type { JobDetail } from '../types';
 
 export function useJobs() {
   return useQuery({
@@ -39,16 +39,5 @@ export function useUploadPdf(onCreated?: (jobId: string) => void) {
       void queryClient.setQueryData(['job', job.id], job);
       onCreated?.(job.id);
     },
-  });
-}
-
-export function useSymbolCountReport(
-  jobId: string | null,
-  symbolCountStatus?: SymbolCountStatus | null,
-) {
-  return useQuery({
-    queryKey: ['symbolCountReport', jobId],
-    queryFn: () => fetchSymbolCountReport(jobId!),
-    enabled: Boolean(jobId) && symbolCountStatus === 'done',
   });
 }

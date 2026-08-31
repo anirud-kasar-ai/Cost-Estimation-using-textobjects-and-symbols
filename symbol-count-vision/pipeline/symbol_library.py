@@ -32,6 +32,7 @@ INDEX_PATH = LIBRARY_DIR / "index.json"
 # Legend PDFs already present in the workspace that carry real glyph artwork;
 # used to seed the library the first time it is empty.
 SEED_PDF_DIRS = [
+    config.ROOT.parent / "dual-pathway-drawing-split" / "storage" / "technical_symbols",
     config.ROOT.parent / "drawing-zoom-split" / "storage" / "technical_symbols",
 ]
 

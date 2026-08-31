@@ -202,7 +202,7 @@ class LlamaVisionClient:
     def _load_groq(self) -> None:
         if not config.GROQ_API_KEY:
             self._load_error = (
-                "GROQ_API_KEY is empty. Set it in vision-extraction/.env "
+                "GROQ_API_KEY is empty. Set it in drawing-zoom-split/.env "
                 "(create a key at https://console.groq.com/keys)."
             )
             logger.error(self._load_error)

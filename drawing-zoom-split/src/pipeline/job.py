@@ -19,7 +19,6 @@ from pipeline.page_render import render_pages
 from pipeline.sheet_scan import PageScan, WingHint, _in_title_block, scan_pdf_pages
 from pipeline.roi_zoom import export_wing_roi_and_zooms
 from pipeline.extraction.stages import finalize_sheet_notes, run_extraction_stages
-from pipeline.symbol_count import run_symbol_count
 from pipeline.wing_crop import assign_wing_instance_ids, crop_wings, slugify
 
 logger = logging.getLogger(__name__)
@@ -42,7 +41,6 @@ FOLDER_GUIDE = """Dual-pathway drawing split output
               Folder: B-WING-EAST/     all B-WING-EAST crops in this job
               Name:   page_004.jpg     source page number
 05_metadata/  Per-page JSON: wing map, label points, CV pixel boxes.
-06_symbol_counts/  Symbol count pivot CSV/PDF per wing instance (when enabled).
 summary.json  Flat index + skipped pages.
 job.json      Job status for the batch runner.
 
@@ -573,50 +571,12 @@ def process_job(job_id: str, *, on_progress: ProgressFn | None = None) -> dict[s
         if sheet_notes_info is not None:
             job["diagram_notes_written"] = finalize_sheet_notes(sheet_notes_info, root)
 
-        symbol_instances = 0
-        if config.SYMBOL_COUNT_ENABLED and source.suffix.lower() == ".pdf":
-            _set_stage(job, "counting_symbols", "Counting symbols per wing")
-            progress("counting_symbols", "Counting symbols on wing images with vision model")
-            try:
-                count_result = run_symbol_count(root, on_progress=progress)
-                symbol_instances = int(count_result.get("instances") or 0)
-                job.update(
-                    {
-                        "symbol_count_status": count_result.get("status"),
-                        "symbol_count_instances": symbol_instances,
-                        "symbol_count_detail_path": count_result.get(
-                            "symbol_count_detail_path"
-                        ),
-                        "symbol_count_report_csv": count_result.get(
-                            "symbol_count_report_csv"
-                        ),
-                        "symbol_count_report_pdf": count_result.get(
-                            "symbol_count_report_pdf"
-                        ),
-                        "symbol_count_report_json": count_result.get(
-                            "symbol_count_report_json"
-                        ),
-                    }
-                )
-                if count_result.get("reason"):
-                    job["symbol_count_reason"] = count_result["reason"]
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("Symbol count failed for job %s", job_id)
-                job["symbol_count_status"] = "failed"
-                job["symbol_count_error"] = str(exc)
-
         job["status"] = "done"
         job["stage"] = "done"
-        base_message = (
+        job["message"] = (
             f"Done — {diagram_count} diagram(s) and {wing_count} wing image(s) "
             f"from {kept_pages} of {len(page_paths)} page(s)"
         )
-        if job.get("symbol_count_status") == "done" and symbol_instances:
-            job["message"] = f"{base_message}; symbol counts for {symbol_instances} wing instance(s)"
-        elif job.get("symbol_count_status") == "failed":
-            job["message"] = f"{base_message}; symbol count failed (see symbol_count_error)"
-        else:
-            job["message"] = base_message
 
         write_job(job_id, job)
         _write_summary(root, job, pages_out)

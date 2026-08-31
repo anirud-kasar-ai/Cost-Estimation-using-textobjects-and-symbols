@@ -9,12 +9,29 @@ if str(project_root) not in sys.path:
 
 from pipeline.symbol_legend import parse_symbol_file
 
-SUMMARY_PDF = (
-    project_root.parent
-    / "drawing-zoom-split"
+_PARENT = project_root.parent
+SUMMARY_PDF = next(
+    (
+        path
+        for path in (
+            _PARENT
+            / "dual-pathway-drawing-split"
+            / "storage"
+            / "technical_symbols"
+            / "1948BIDDrawings technical symbol.pdf",
+            _PARENT
+            / "drawing-zoom-split"
+            / "storage"
+            / "technical_symbols"
+            / "1948BIDDrawings technical symbol.pdf",
+        )
+        if path.is_file()
+    ),
+    _PARENT
+    / "dual-pathway-drawing-split"
     / "storage"
     / "technical_symbols"
-    / "1948BIDDrawings technical symbol.pdf"
+    / "1948BIDDrawings technical symbol.pdf",
 )
 
 

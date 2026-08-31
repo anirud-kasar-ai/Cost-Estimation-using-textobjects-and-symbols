@@ -209,39 +209,6 @@ def job_sheet_notes_pdf(job_id: str) -> FileResponse:
     return FileResponse(path, media_type="application/pdf", filename=path.name)
 
 
-@app.get("/api/jobs/{job_id}/symbol-count.csv")
-def job_symbol_count_csv(job_id: str) -> FileResponse:
-    job = get_job(job_id)
-    rel = job.get("symbol_count_report_csv")
-    if not rel:
-        raise HTTPException(status_code=404, detail="Symbol count CSV not found")
-    path = _safe_file(job_id, rel)
-    return FileResponse(path, media_type="text/csv", filename=path.name)
-
-
-@app.get("/api/jobs/{job_id}/symbol-count.pdf")
-def job_symbol_count_pdf(job_id: str) -> FileResponse:
-    job = get_job(job_id)
-    rel = job.get("symbol_count_report_pdf")
-    if not rel:
-        raise HTTPException(status_code=404, detail="Symbol count PDF not found")
-    path = _safe_file(job_id, rel)
-    return FileResponse(path, media_type="application/pdf", filename=path.name)
-
-
-@app.get("/api/jobs/{job_id}/symbol-count.json")
-def job_symbol_count_json(job_id: str) -> FileResponse:
-    job = get_job(job_id)
-    rel = job.get("symbol_count_report_json")
-    if not rel:
-        fallback = f"{config.SYMBOL_COUNT_DIR}/symbol_count_report.json"
-        rel = fallback if (config.STORAGE_DIR / job_id / fallback).is_file() else None
-    if not rel:
-        raise HTTPException(status_code=404, detail="Symbol count report not found")
-    path = _safe_file(job_id, rel)
-    return FileResponse(path, media_type="application/json", filename=path.name)
-
-
 @app.get("/api/jobs/{job_id}/files/{rel_path:path}")
 def job_file(job_id: str, rel_path: str) -> FileResponse:
     path = _safe_file(job_id, rel_path)

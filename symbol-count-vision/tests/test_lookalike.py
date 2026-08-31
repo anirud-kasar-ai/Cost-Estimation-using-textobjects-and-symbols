@@ -103,6 +103,13 @@ def test_conduit_stub_long_middle_bar_detected_plain_e_not():
     assert detect_conduit_stubs(plain, exclude_top_pct=0.0) == []
 
 
+def test_filled_triangle_is_not_conduit_stub():
+    img = Image.new("RGB", (300, 200), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    draw.polygon([(150, 70), (130, 110), (170, 110)], fill=(0, 0, 0))
+    assert detect_conduit_stubs(img, exclude_top_pct=0.0) == []
+
+
 def test_bowtie_data_pole_triangles_are_not_hash_drops():
     img = Image.new("RGB", (400, 400), (255, 255, 255))
     draw = ImageDraw.Draw(img)
@@ -113,6 +120,21 @@ def test_bowtie_data_pole_triangles_are_not_hash_drops():
     poles = detect_data_pole_boxes(img, exclude_top_pct=0.0)
     assert len(poles) >= 1
     assert drops == []
+
+
+def test_data_pole_keeps_flanking_hash_drops():
+    img = Image.new("RGB", (400, 400), (255, 255, 255))
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((160, 160, 240, 240), outline=(0, 0, 0), width=3)
+    draw.polygon([(162, 162), (162, 238), (200, 200)], fill=(0, 0, 0))
+    draw.polygon([(238, 162), (238, 238), (200, 200)], fill=(0, 0, 0))
+    draw.polygon([(110, 180), (110, 220), (148, 200)], fill=(0, 0, 0))
+    draw.polygon([(290, 180), (290, 220), (252, 200)], fill=(0, 0, 0))
+    drops, cams = detect_drop_marks(img, exclude_top_pct=0.0, read_quantities=False)
+    poles = detect_data_pole_boxes(img, exclude_top_pct=0.0)
+    assert len(poles) >= 1
+    assert len(drops) >= 2
+    assert cams == []
 
 
 def test_lone_triangle_still_counts_as_drop():

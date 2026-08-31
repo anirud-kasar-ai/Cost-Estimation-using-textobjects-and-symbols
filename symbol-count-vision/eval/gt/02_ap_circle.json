@@ -1,0 +1,18 @@
+{
+  "id": "02_ap_circle",
+  "image": "crops/02_ap_circle.png",
+  "width": 653,
+  "height": 653,
+  "instances": [
+    {
+      "key": "AP",
+      "qty": 1,
+      "box": {
+        "x1": 270,
+        "y1": 270,
+        "x2": 370,
+        "y2": 370
+      }
+    }
+  ]
+}

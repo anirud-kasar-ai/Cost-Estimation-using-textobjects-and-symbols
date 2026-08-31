@@ -232,20 +232,60 @@ def detect_symbols_from_glyphs(
     return detections
 
 
-def score_glyph_on_crop(crop: Image.Image, glyph: Image.Image) -> float:
+def score_gray_on_gray(
+    crop_gray: np.ndarray,
+    glyph_gray: np.ndarray,
+    *,
+    scales: list[float] | None = None,
+) -> float:
+    """Best TM_CCOEFF_NORMED of ``glyph_gray`` inside ``crop_gray``."""
+    import cv2
+
+    if crop_gray.size == 0 or glyph_gray.size == 0:
+        return 0.0
+    gh, gw = int(glyph_gray.shape[0]), int(glyph_gray.shape[1])
+    ph, pw = int(crop_gray.shape[0]), int(crop_gray.shape[1])
+    if gh < 4 or gw < 4 or ph < 4 or pw < 4:
+        return 0.0
+    pad_h = max(0, gh - ph + 4)
+    pad_w = max(0, gw - pw + 4)
+    plan = crop_gray
+    if pad_h or pad_w:
+        plan = cv2.copyMakeBorder(
+            crop_gray,
+            pad_h // 2,
+            pad_h - pad_h // 2,
+            pad_w // 2,
+            pad_w - pad_w // 2,
+            cv2.BORDER_CONSTANT,
+            value=255,
+        )
+        ph, pw = int(plan.shape[0]), int(plan.shape[1])
+
+    use_scales = list(scales or [0.75, 1.0, 1.25])
+    best = 0.0
+    for scale in use_scales:
+        sw = max(8, int(round(gw * scale)))
+        sh = max(8, int(round(gh * scale)))
+        if sw >= pw or sh >= ph:
+            continue
+        resized = cv2.resize(glyph_gray, (sw, sh), interpolation=cv2.INTER_AREA)
+        result = cv2.matchTemplate(plan, resized, cv2.TM_CCOEFF_NORMED)
+        _min_val, max_val, _min_loc, _max_loc = cv2.minMaxLoc(result)
+        if float(max_val) > best:
+            best = float(max_val)
+    return best
+
+
+def score_glyph_on_crop(
+    crop: Image.Image,
+    glyph: Image.Image,
+    *,
+    scales: list[float] | None = None,
+) -> float:
     """Best template-match score of ``glyph`` inside ``crop`` (0..1)."""
     import cv2
 
     plan_gray = cv2.cvtColor(np.array(crop.convert("RGB")), cv2.COLOR_RGB2GRAY)
     glyph_gray = np.array(glyph.convert("L"))
-    if glyph_gray.size == 0 or plan_gray.size == 0:
-        return 0.0
-    hits = _match_one_template(
-        plan_gray,
-        glyph_gray,
-        threshold=0.0,
-        scales=[0.4, 0.6, 0.8, 1.0, 1.25, 1.5, 2.0],
-    )
-    if not hits:
-        return 0.0
-    return max(float(h[4]) for h in hits)
+    return score_gray_on_gray(plan_gray, glyph_gray, scales=scales)

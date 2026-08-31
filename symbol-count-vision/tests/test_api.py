@@ -13,7 +13,7 @@ project_root = Path(__file__).resolve().parents[1]
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from app import app  # noqa: E402
+from app import app, _job_states, _running, _state_lock  # noqa: E402
 from pipeline import config  # noqa: E402
 from pipeline.cv.nms import BoundingBox, SymbolDetection  # noqa: E402
 
@@ -132,3 +132,49 @@ def test_api_folder_upload(tmp_path: Path, monkeypatch):
         assert mocked.called
         status_resp = client.get(f"/api/jobs/{body['job_id']}")
         assert status_resp.json()["status"] == "done"
+
+
+def test_resume_orphaned_processing_job(tmp_path, monkeypatch):
+    import app as app_mod
+
+    jobs = tmp_path / "jobs"
+    monkeypatch.setattr(config, "STORAGE_DIR", jobs, raising=False)
+    monkeypatch.setattr(config, "SYMBOL_COUNT_SYNC_JOBS", True, raising=False)
+    job_id = "orphan_folder_job"
+    out = jobs / job_id
+    out.mkdir(parents=True)
+    (out / "symbol_file.json").write_text("{}", encoding="utf-8")
+    tiles = out / "tiles"
+    tiles.mkdir()
+    Image.new("RGB", (32, 32), (255, 255, 255)).save(tiles / "plan_zoom_r00_c00.png")
+    (out / "job.json").write_text(
+        json.dumps(
+            {
+                "job_id": job_id,
+                "status": "processing",
+                "stage": "detect_tiles_then_merge",
+                "error": None,
+                "created_at": 1.0,
+                "finished_at": None,
+                "filename": "1 zoom tiles",
+                "mode": "folder",
+            }
+        ),
+        encoding="utf-8",
+    )
+    with _state_lock:
+        _running.discard(job_id)
+        _job_states.pop(job_id, None)
+
+    called = {"n": 0}
+
+    def fake_run(jid: str) -> None:
+        called["n"] += 1
+        app_mod._set_job_state(jid, status="done", stage=None, finished_at=1.0)
+
+    monkeypatch.setattr(app_mod, "_run_job", fake_run)
+    client = TestClient(app)
+    resp = client.get(f"/api/jobs/{job_id}")
+    assert resp.status_code == 200
+    assert called["n"] == 1
+    assert resp.json()["status"] == "done"

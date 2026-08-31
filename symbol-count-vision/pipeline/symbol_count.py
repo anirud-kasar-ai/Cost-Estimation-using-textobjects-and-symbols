@@ -13,29 +13,15 @@ from pipeline.cv.nms import (
     nms_by_class,
     suppress_cross_label,
     suppress_cross_source_duplicates,
-    suppress_hourglass_on_triangles,
+    suppress_hash_on_devices,
+    suppress_in_boxes,
     suppress_nearby_same_label,
-    suppress_triangles_near_tags,
-    suppress_triangles_near_templates,
+    suppress_overlapping_devices,
+    suppress_stub_on_devices,
 )
-from pipeline.cv.lookalike import (
-    conduit_stub_legend_key,
-    detect_conduit_stubs,
-    reclassify_j_hook_clusters,
-)
-from pipeline.cv.ocr_tags import (
-    ap_skip_centers_from_ocr,
-    clock_combo_skip_centers,
-    detect_tags_from_ocr,
-    tesseract_available,
-)
-from pipeline.cv.tag_match import count_key, tagged_legend_keys, text_legend_keys
-from pipeline.cv.template_match import detect_symbols_from_glyphs
-from pipeline.cv.triangle_drops import (
-    detect_data_pole_boxes,
-    detect_drop_marks,
-    device_glyph_skip_centers,
-)
+from pipeline.cv.ocr_tags import tesseract_available
+from pipeline.cv.tag_match import count_key, tagged_legend_keys
+from pipeline.cv.template_match import LINEAR_GLYPH_RE
 from pipeline.overlay import draw_detections_overlay
 from pipeline.symbol_legend import (
     SymbolTableInfo,
@@ -57,7 +43,7 @@ OVERLAP / DENSE ZOOM (critical — do not double-count):
   ONE equipment instance for that tag — do not count the glyph and the letters twice.
 - Clustered wall runs of the same tag (e.g. several J along a path) count separately
   only when centers are clearly distinct and not the same overlapping ink.
-  Exception: two or more J's on one horizontal line are ONE J-HOOK, not many J-boxes.
+  J-HOOK vs J, AP vs #, hourglass vs drop: follow TAXONOMY_CONTEXT_RULES only.
 - Ignore elevations like +48 / +49, sheet callouts like 1/D5, KEY PLAN text, and
   room labels (A-1, A-2, A-3, RR/B) — they are not legend equipment counts.
 - Pipe callouts (1|5, 1|8, 1|13) are keynotes tied to nearby drops; do not invent
@@ -78,67 +64,32 @@ CV ↔ VISION MAPPING:
 - Never invent symbols that are not inked on the plan.
 """.strip()
 
-# Domain knowledge for construction / low-voltage CAD bid sets (Garland-style).
+# Drawing literacy that is NOT look-alike geometry (those live in the taxonomy).
 CAD_CONSTRUCTION_SYMBOL_KNOWLEDGE = """
 CONSTRUCTION CAD / LOW-VOLTAGE PLAN LITERACY (mandatory):
 
 You are reading a contractor bid-set technology floor plan (AutoCAD/Revit plot),
 NOT a schematic diagram and NOT a photograph. Thin 1–2 px vector ink is real.
 
-HOW TO READ THIS DRAWING FAMILY:
-1) '#' DATA PERMANENT LINK (data drop / jack cluster):
-   - LOOKS LIKE: small SOLID FILLED black triangle (any orientation: left/right/up/down)
-     sitting on or next to a wall/raceway line, often with a free digit 1–9 beside it.
-   - MEANING: one physical drop mark. Digit = QTY of jacks (# = QTY convention).
-   - COUNT: one mark per triangle. Do NOT call these "direction arrows" or "arrowheads"
-     on telecom plans — filled triangles next to raceway/walls are data drops.
-   - RELATED: framed keynotes "1|13", "1 13", "1|5" (or stacked 1 over 13) locate the
-     same drops; they are NOT a separate legend symbol and NOT raceway model numbers.
+Look-alike / context rules are NOT listed here. Use TAXONOMY_CONTEXT_RULES only.
 
-2) SURFACE RACEWAY (Wiremold WM2300 / WM5400 / WM5500):
-   - LOOKS LIKE: small open rectangle / box ON the wall or raceway linework, often with
-     digits 2300 / 5400 / 5500 printed beside it (frequently VERTICAL).
-   - MEANING: one surface raceway device/section labeled with that series.
-   - COUNT: one instance per distinct raceway BOX + its part-number label cluster.
-     Do not count the digit string and the box as two. Do not invent WM letters if
-     only 5400 is printed — map 5400 → SURFACE RACEWAY (WM5400) legend key.
+NEVER COUNT AS LEGEND EQUIPMENT:
+- Elevations AFF: "+48", "+49" (mounting height only).
+- Room / space IDs: A-1, A-2, 1.03 in a circle, RR/B, RR/G.
+- KEY PLAN inset, sheet title "A-WING (EAST)", grid bubbles, dimension strings.
+- Boxed keynote digits alone (square with "1") unless they are a legend tag.
+- Break-line zigzags, hatch, door swings, furniture outlines.
+- Pipe callouts (1|5, 1|13) as their own symbol — they only locate nearby '#' drops.
 
-3) LETTER EQUIPMENT TAGS (J, G, AP, WP, TGB, NVR, …):
-   - LOOKS LIKE: short upright or rotated capital letters on/near walls or under glyphs
-     (AP under a circle; WP by a horn/speaker; a SINGLE J along a cable path).
-   - COUNT: one per distinct letter-tag instance matching the legend tag.
-   - J vs J-HOOK: a row of J's on one line (—J—J—J—) is J-HOOK, not junction boxes.
-
-4) NETWORK CAMERA:
-   - LOOKS LIKE: two opposing solid triangles with a small X-box between (hourglass),
-     often with QTY digits outside the tips — that assembly is ONE camera, not drops.
-
-4b) DATA POLE:
-   - LOOKS LIKE: square with two opposing filled triangles (bowtie). Not '#' drops.
-
-4c) CONDUIT STUB:
-   - LOOKS LIKE: letter E with a long middle bar on conduit. Not the word EAST.
-
-5) NEVER COUNT AS LEGEND EQUIPMENT:
-   - Elevations AFF: "+48", "+49" (mounting height only).
-   - Room / space IDs: A-1, A-2, 1.03 in a circle, RR/B, RR/G.
-   - KEY PLAN inset, sheet title "A-WING (EAST)", grid bubbles, dimension strings.
-   - Boxed keynote digits alone (square with "1") unless they are clearly a legend
-     equipment tag — usually they are keyed notes, not jacks or raceway.
-   - Break-line zigzags, hatch, door swings, furniture outlines.
-
-6) DENSE WALL RUNS (typical zoom tile):
-   - A single wall can show: raceway box + "5400" + "+48" + filled triangle + QTY digit
-     + keynote "1" all within inches. Parse each role separately; count only legend keys.
-   - Example: triangle + "2" → one '#' mark (qty 2). Rectangle + "5400" → one WM5400.
-     "+48" → ignore. Square "1" keynote → ignore unless legend says otherwise.
+DENSE WALL RUNS: raceway box + digits + elevation + triangle + QTY + keynote can
+sit within inches. Parse roles separately; count only legend keys.
 """.strip()
 
 _SOURCE_LABELS = {
     "template": "template match",
     "ocr": "text/OCR",
     "vision_ocr": "vision OCR",
-    "vision_detect": "vision locate",
+    "vision_classify": "vision classify",
     "triangle": "drop marks",
     "callout_drop": "callout drops",
     "hourglass": "camera marks",
@@ -308,6 +259,7 @@ def _detections_to_dict(
             "score": det.score,
             "source": det.source,
             "qty": max(1, int(det.qty)),
+            "classify_source": det.classify_source,
             "box": {
                 "x1": det.box.x1,
                 "y1": det.box.y1,
@@ -323,6 +275,41 @@ def _detections_to_dict(
     return out
 
 
+def _candidates_to_detections(
+    candidates: list[Any],
+    taxonomy: Any,
+    valid_keys: set[str],
+) -> list[SymbolDetection]:
+    from pipeline.count.finalize import apply_count_semantics
+
+    out: list[SymbolDetection] = []
+    for cand in candidates:
+        key = cand.resolved_key
+        classify_source = cand.classify_source
+        if not key or cand.status != "resolved":
+            if cand.candidate_keys:
+                key = cand.candidate_keys[0]
+                classify_source = classify_source or "cv_fallback"
+            elif (cand.extras or {}).get("legend_hint"):
+                key = str(cand.extras["legend_hint"])
+                classify_source = classify_source or "cv_fallback"
+            else:
+                continue
+        if key not in valid_keys:
+            continue
+        out.append(
+            SymbolDetection(
+                symbol=key,
+                box=cand.bbox,
+                score=float(cand.score),
+                source=str(cand.source),
+                qty=max(1, int(cand.qty or 1)),
+                classify_source=classify_source,
+            )
+        )
+    return apply_count_semantics(out, taxonomy)
+
+
 def detect_symbols_raw(
     *,
     image: Image.Image,
@@ -334,22 +321,25 @@ def detect_symbols_raw(
     use_vision_ocr: bool | None = None,
     exclude_top_pct: float | None = None,
 ) -> tuple[list[SymbolDetection], list[str], dict[str, Any]]:
-    """Run all detectors; return legend-gated detections (+ notes/meta).
+    """CV propose → context resolve → optional vision classify (label only).
 
-    When ``apply_local_nms`` is True (single-image path), class NMS and
-    cross-label suppression run here. Folder merge sets it False and applies
-    NMS once in ROI space after translating all tiles.
-
-    For zoom tiles, pass ``exclude_top_pct=0`` (no title-block band — the top
-    of a tile is plan content). Folder jobs may set ``use_vision_ocr=True`` to
-    run Gemini text OCR + symbol locate on every tile (costly, higher recall).
+    Localization is always a CV contour/OCR box. LLMs never supply boxes.
+    Folder merge sets ``apply_local_nms=False`` and NMS once in ROI space.
     """
+    from pipeline.classify.context_resolver import resolve_candidates
+    from pipeline.classify.glyph_identify import identify_candidates_by_glyphs
+    from pipeline.classify.vision_classify import classify_ambiguous
+    from pipeline.cv.ocr_tags import clear_ocr_page_cache
+    from pipeline.detect.candidates import propose_candidates
+    from pipeline.taxonomy.builder import taxonomy_from_legend
+
     notes: list[str] = list(legend.notes or [])
     meta: dict[str, Any] = {
         "linear_keys": set(),
         "hash_key": None,
         "camera_key": None,
         "glyphs_available": False,
+        "taxonomy": None,
     }
     if not legend.entries:
         return [], ["Empty legend catalog"], meta
@@ -361,276 +351,160 @@ def detect_symbols_raw(
     run_vision = (
         bool(use_vision_ocr)
         if use_vision_ocr is not None
-        else config.vision_ocr_enabled()
+        else config.llm_enabled()
     )
     valid_keys = legend_count_keys(legend)
-    raw_detections: list[SymbolDetection] = []
-    linear_keys: set[str] = set()
+    glyphs_available = bool(
+        glyph_dir and glyph_dir.is_dir() and any(glyph_dir.glob("*.png"))
+    )
+    meta["glyphs_available"] = glyphs_available
+
+    taxonomy = taxonomy_from_legend(
+        legend, glyph_dir, source=symbol_file_suffix
+    )
+    meta["taxonomy"] = taxonomy
+    linear_keys = {
+        e.key for e in taxonomy.entries if e.count_semantics == "linear_suppressed"
+    }
+    meta["linear_keys"] = linear_keys
+    hash_key = next(
+        (e.key for e in taxonomy.entries if e.count_semantics == "qty_expand"),
+        None,
+    )
+    if hash_key is None:
+        hash_key = next((e.key for e in taxonomy.entries if e.key == "#"), None)
+    camera_key = next(
+        (e.key for e in taxonomy.entries if e.shape_class == "hourglass"), None
+    )
+    pole_key = next(
+        (e.key for e in taxonomy.entries if e.shape_class == "bowtie"), None
+    )
+    meta["hash_key"] = hash_key
+    meta["camera_key"] = camera_key
+    meta["pole_key"] = pole_key
 
     if not tesseract_available():
         notes.append(
             "Tesseract OCR is not installed — text-tag symbol detection was skipped. "
             "Install Tesseract and ensure it is on PATH."
         )
-    else:
-        raw_detections.extend(
-            detect_tags_from_ocr(image, legend, exclude_top_pct=title_band)
-        )
 
-    if run_vision and config.vision_ocr_enabled():
-        from pipeline.cv.ocr_tags import detect_tags_from_vision_ocr
-
-        vision_hits = detect_tags_from_vision_ocr(
-            image, legend, exclude_top_pct=title_band
-        )
-        raw_detections.extend(vision_hits)
-        if vision_hits:
-            notes.append(
-                f"Vision OCR (architect prompt) added {len(vision_hits)} text tag hit(s)."
-            )
-
-        # Full legend symbol locate (geometry + tags) via Gemini/Groq.
-        from pipeline.llm_verify import detect_legend_symbols_with_llm
-
-        # linear_keys filled after glyphs below; precompute from descriptions now
-        from pipeline.cv.template_match import LINEAR_GLYPH_RE
-
-        pre_linear = {
-            count_key(e)
-            for e in legend.entries
-            if LINEAR_GLYPH_RE.search(count_key(e) + " " + (e.description or ""))
-            and (e.symbol or "").strip() != "#"
-        }
-        located = detect_legend_symbols_with_llm(
-            image, legend, linear_keys=pre_linear
-        )
-        if located.get("ok") and located.get("detections"):
-            y_min = image.size[1] * title_band
-            n_add = 0
-            for item in located["detections"]:
-                if float(item["y1"]) < y_min:
-                    continue
-                sym = item["symbol"]
-                if sym not in valid_keys:
-                    continue
-                kind = str(item.get("kind") or "")
-                source = "vision_detect"
-                qty = max(1, int(item.get("qty") or 1))
-                if sym == "#" or kind == "drop":
-                    source = "vision_detect"
-                raw_detections.append(
-                    SymbolDetection(
-                        symbol=sym,
-                        box=BoundingBox(
-                            x1=float(item["x1"]),
-                            y1=float(item["y1"]),
-                            x2=float(item["x2"]),
-                            y2=float(item["y2"]),
-                        ),
-                        score=max(0.55, min(1.0, float(item.get("confidence") or 0.7))),
-                        source=source,
-                        qty=qty,
-                    )
-                )
-                n_add += 1
-            if n_add:
-                notes.append(
-                    f"Vision symbol locate added {n_add} legend instance(s) "
-                    f"({located.get('model')})."
-                )
-        elif located.get("error"):
-            notes.append(f"Vision symbol locate skipped: {located['error']}")
-
-    glyphs_available = bool(glyph_dir and glyph_dir.is_dir() and any(glyph_dir.glob("*.png")))
-    meta["glyphs_available"] = glyphs_available
-    if glyphs_available:
-        raw_detections.extend(detect_symbols_from_glyphs(image, legend, glyph_dir))
-        from pipeline.cv.template_match import LINEAR_GLYPH_RE
-
-        linear_keys = {
-            count_key(e)
-            for e in legend.entries
-            if LINEAR_GLYPH_RE.search(count_key(e) + " " + (e.description or ""))
-            and (e.symbol or "").strip() != "#"
-        }
-        meta["linear_keys"] = linear_keys
-        if linear_keys:
-            notes.append(
-                "Linear/run items are not counted by glyph template matching "
-                "(they match every straight wall line). Part labels like "
-                "WM2300/2300 on the plan are still counted via text/OCR: "
-                + ", ".join(sorted(linear_keys))
-            )
-    elif symbol_file_suffix.lower() == ".json":
-        notes.append(
-            "Graphical template matching skipped: upload a PDF legend to extract glyph templates."
-        )
-
-    tags = tagged_legend_keys(legend)
-    if not tags and not glyphs_available:
-        notes.append(
-            "Legend has no text tags and no glyph templates — nothing to match on the plan. "
-            "Use symbol_table.json or a technical symbol PDF that includes embedded glyphs."
-        )
-    hash_key = next((display for tag, display in tags if tag == "#"), None)
-    camera_key = _camera_display_key(legend)
-    pole_key = _data_pole_display_key(legend)
-    meta["hash_key"] = hash_key
-    meta["camera_key"] = camera_key
-    meta["pole_key"] = pole_key
-    camera_boxes: list[dict[str, Any]] = []
-    callout_hints: list[dict[str, Any]] = []
-    if hash_key:
-        from pipeline.cv.callout_boxes import detect_pipe_callout_hints
-        from pipeline.cv.ocr_tags import collect_pipe_callout_ocr_hints
-
-        callout_hints = detect_pipe_callout_hints(
-            image, exclude_top_pct=title_band
-        )
-        callout_hints.extend(
-            collect_pipe_callout_ocr_hints(image, exclude_top_pct=title_band)
-        )
-    if hash_key or camera_key:
-        skip = ap_skip_centers_from_ocr(
-            [d for d in raw_detections if d.source in {"ocr", "vision_ocr", "template"}]
-        )
-        skip.extend(device_glyph_skip_centers(image, exclude_top_pct=title_band))
-        skip.extend(clock_combo_skip_centers(image, exclude_top_pct=title_band))
-        for pole in detect_data_pole_boxes(image, exclude_top_pct=title_band):
-            skip.append((float(pole["cx"]), float(pole["cy"])))
-        protect = [(float(h["cx"]), float(h["cy"])) for h in callout_hints]
-        drop_boxes, camera_boxes = detect_drop_marks(
-            image,
-            skip_centers=skip,
-            exclude_top_pct=title_band,
-            protect_centers=protect or None,
-        )
-        if hash_key:
-            for box in drop_boxes:
-                raw_detections.append(
-                    SymbolDetection(
-                        symbol=hash_key,
-                        box=BoundingBox(
-                            x1=box["x1"],
-                            y1=box["y1"],
-                            x2=box["x2"],
-                            y2=box["y2"],
-                        ),
-                        score=0.85,
-                        source="triangle",
-                        qty=int(box.get("qty") or 1),
-                    )
-                )
-        if camera_key:
-            for box in camera_boxes:
-                raw_detections.append(
-                    SymbolDetection(
-                        symbol=camera_key,
-                        box=BoundingBox(
-                            x1=box["x1"],
-                            y1=box["y1"],
-                            x2=box["x2"],
-                            y2=box["y2"],
-                        ),
-                        score=0.8,
-                        source="hourglass",
-                    )
-                )
-        if pole_key:
-            for box in detect_data_pole_boxes(image, exclude_top_pct=title_band):
-                raw_detections.append(
-                    SymbolDetection(
-                        symbol=pole_key,
-                        box=BoundingBox(
-                            x1=box["x1"],
-                            y1=box["y1"],
-                            x2=box["x2"],
-                            y2=box["y2"],
-                        ),
-                        score=0.8,
-                        source="bowtie",
-                    )
-                )
-        if hash_key:
-            from pipeline.cv.callout_boxes import reinforce_hash_from_callouts
-
-            raw_detections = reinforce_hash_from_callouts(
-                image=image,
-                hash_key=hash_key,
-                existing=raw_detections,
-                callout_hints=callout_hints,
-                exclude_top_pct=title_band,
-            )
-        if tesseract_available() and drop_boxes and text_legend_keys(legend):
-            from pipeline.cv.ocr_tags import _ocr_part_labels_near_centers
-            from pipeline.cv.tag_match import text_legend_keys as _tlk
-
-            raw_detections.extend(
-                _ocr_part_labels_near_centers(
-                    image,
-                    _tlk(legend),
-                    [(b["cx"], b["cy"]) for b in drop_boxes],
-                    image.size[1] * title_band,
-                )
-            )
-
-    elif pole_key:
-        for box in detect_data_pole_boxes(image, exclude_top_pct=title_band):
-            raw_detections.append(
-                SymbolDetection(
-                    symbol=pole_key,
-                    box=BoundingBox(
-                        x1=box["x1"],
-                        y1=box["y1"],
-                        x2=box["x2"],
-                        y2=box["y2"],
-                    ),
-                    score=0.8,
-                    source="bowtie",
-                )
-            )
-
-    # Camera templates alone are unreliable (match keynotes / junctions).
-    raw_detections = _filter_camera_templates_near_geometry(
-        raw_detections, camera_boxes
+    candidates = propose_candidates(
+        image,
+        legend,
+        taxonomy,
+        tile_id="tile",
+        exclude_top_pct=title_band,
     )
-    raw_detections = suppress_hourglass_on_triangles(raw_detections)
-    raw_detections = suppress_triangles_near_tags(raw_detections)
-    raw_detections = suppress_triangles_near_templates(raw_detections)
-    stub_key = conduit_stub_legend_key(legend)
-    if stub_key:
-        for box in detect_conduit_stubs(image, exclude_top_pct=title_band):
-            raw_detections.append(
-                SymbolDetection(
-                    symbol=stub_key,
-                    box=BoundingBox(
-                        x1=box["x1"],
-                        y1=box["y1"],
-                        x2=box["x2"],
-                        y2=box["y2"],
+
+    if hash_key:
+        from pipeline.cv.ocr_tags import collect_pipe_callout_ocr_hints, collect_qty_digit_hints
+        from pipeline.cv.triangle_drops import find_triangle_tip_near
+        from pipeline.detect.candidates import Candidate
+
+        # Reuse the tile's single OCR pass. Per-box Tesseract on every contour
+        # was the main remaining slowdown.
+        callout_hints = collect_pipe_callout_ocr_hints(image, exclude_top_pct=title_band)
+        for hint in callout_hints:
+            tip = find_triangle_tip_near(image, hint["cx"], hint["cy"])
+            if not tip:
+                continue
+            candidates.append(
+                Candidate(
+                    tile_id="tile",
+                    bbox=BoundingBox(
+                        x1=float(tip["x"]),
+                        y1=float(tip["y"]),
+                        x2=float(tip["x"] + tip["w"]),
+                        y2=float(tip["y"] + tip["h"]),
                     ),
-                    score=0.78,
-                    source="stub",
+                    shape_class_guess="triangle_like",
+                    score=0.8,
+                    source="callout_drop",
                 )
             )
-    raw_detections = reclassify_j_hook_clusters(raw_detections, legend)
+        qty_hints = collect_qty_digit_hints(image, exclude_top_pct=title_band)
+        for cand in candidates:
+            if cand.source not in {"triangle", "callout_drop"}:
+                continue
+            for hint in qty_hints:
+                dist = ((cand.cx - hint["cx"]) ** 2 + (cand.cy - hint["cy"]) ** 2) ** 0.5
+                if dist <= 36.0:
+                    cand.qty = max(int(cand.qty or 1), int(hint["qty"]))
+
+    resolved = resolve_candidates(candidates, taxonomy)
+    if run_vision and config.llm_enabled():
+        n_amb = sum(1 for c in resolved if c.status == "ambiguous")
+        resolved = classify_ambiguous(image, resolved, taxonomy, legend=legend)
+        n_vis = sum(1 for c in resolved if c.classify_source == "vision_classify")
+        if n_amb:
+            notes.append(
+                f"Vision classify: {n_amb} ambiguous candidate(s), "
+                f"{n_vis} labeled by vision."
+            )
+
+    resolved, glyph_stats = identify_candidates_by_glyphs(
+        image,
+        resolved,
+        legend=legend,
+        glyph_dir=glyph_dir,
+        taxonomy=taxonomy,
+        valid_keys=valid_keys,
+    )
+    if glyph_stats.get("compared") or glyph_stats.get("no_glyph"):
+        notes.append(
+            "Glyph identify: after detect, score each mark only against its "
+            "own glyph file if that file exists in the glyph folder "
+            f"(compared {glyph_stats.get('compared', 0)}, "
+            f"no glyph file {glyph_stats.get('no_glyph', 0)}, "
+            f"confirmed {glyph_stats.get('confirmed', 0)}, "
+            f"named {glyph_stats.get('assigned', 0)})."
+        )
+
+    # QTY stays 1 unless OCR already saw a digit beside the drop. Per-triangle
+    # Tesseract (3 PSM modes × strips) was hundreds of extra OCR calls per tile.
+
+    raw_detections = _candidates_to_detections(resolved, taxonomy, valid_keys)
     raw_detections = filter_to_legend(raw_detections, valid_keys)
 
+    if linear_keys:
+        notes.append(
+            "Linear/run items are not counted as discrete glyphs; part labels "
+            "like WM2300/2300 are still counted via OCR: "
+            + ", ".join(sorted(linear_keys))
+        )
+    if not tagged_legend_keys(legend) and not glyphs_available:
+        notes.append(
+            "Legend has no text tags and no glyph templates — nothing to match "
+            "on the plan. Use symbol_table.json or a technical symbol PDF that "
+            "includes embedded glyphs."
+        )
+    elif symbol_file_suffix.lower() == ".json" and not glyphs_available:
+        notes.append(
+            "Graphical glyph crops unavailable: upload a PDF legend to extract artwork."
+        )
+
     if apply_local_nms:
-        kept = nms_by_class(raw_detections, iou_threshold=nms_iou, center_dist=28.0)
+        kept = nms_by_class(raw_detections, iou_threshold=nms_iou, center_dist=20.0)
         kept = suppress_cross_label(kept, iou_threshold=0.6, source="template")
-        kept = suppress_nearby_same_label(kept, source="ocr", max_center_dist=80.0)
-        kept = suppress_nearby_same_label(kept, source="vision_ocr", max_center_dist=80.0)
-        kept = suppress_nearby_same_label(kept, source="vision_detect", max_center_dist=80.0)
+        kept = suppress_nearby_same_label(kept, source="ocr", max_center_dist=48.0)
         kept = suppress_cross_source_duplicates(
             kept,
-            sources={"ocr", "vision_ocr", "vision_detect", "template"},
-            max_center_dist=36.0,
+            sources={"ocr", "triangle", "hourglass", "bowtie", "stub", "jhook"},
+            max_center_dist=24.0,
             iou_threshold=0.15,
         )
+        kept = suppress_overlapping_devices(kept)
+        kept = suppress_hash_on_devices(kept)
+        kept = suppress_stub_on_devices(kept)
+        from pipeline.cv.ocr_tags import find_keyplan_regions
+
+        kept = suppress_in_boxes(kept, find_keyplan_regions(image))
         kept = filter_to_legend(kept, valid_keys)
+        clear_ocr_page_cache(image)
         return kept, notes, meta
 
+    clear_ocr_page_cache(image)
     return raw_detections, notes, meta
 
 
@@ -650,6 +524,11 @@ def _finalize_counts(
     rejected_detection_items: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     valid_keys = legend_count_keys(legend)
+    taxonomy = meta.get("taxonomy")
+    if taxonomy is not None:
+        from pipeline.count.finalize import apply_count_semantics
+
+        kept = apply_count_semantics(kept, taxonomy)
     kept = filter_to_legend(kept, valid_keys)
     nms_iou = float(nms_iou if nms_iou is not None else config.SYMBOL_COUNT_NMS_IOU)
     hash_key = meta.get("hash_key")
@@ -685,38 +564,24 @@ def _finalize_counts(
     folder_vision = (
         method == "detect_merge_evaluate_count" and config.FOLDER_VISION_COUNT_VERIFY
     )
-    single_vision = method == "single_image_cv"
-    if (
-        image is not None
-        and config.llm_enabled()
-        and (single_vision or folder_vision)
-    ):
+    # Count-verify is diagnostic only: it must not invent counts without CV boxes.
+    if image is not None and config.llm_enabled() and folder_vision:
         from pipeline.llm_verify import verify_counts_with_llm
+        from pipeline.taxonomy.schema import taxonomy_rules_prompt_block
 
-        detection_hints = [
-            {
-                "symbol": d.symbol,
-                "source": d.source,
-                "qty": max(1, int(d.qty)),
-                "cx": round((d.box.x1 + d.box.x2) / 2.0, 1),
-                "cy": round((d.box.y1 + d.box.y2) / 2.0, 1),
-            }
-            for d in kept
+        extra_rules = [
+            CAD_CONSTRUCTION_SYMBOL_KNOWLEDGE,
+            SYMBOL_COUNT_OVERLAP_PROMPT,
+            taxonomy_rules_prompt_block(meta.get("taxonomy")),
         ]
         llm = verify_counts_with_llm(
             image,
             legend,
             counts,
             linear_keys=linear_keys,
-            extra_rules=[
-                CAD_CONSTRUCTION_SYMBOL_KNOWLEDGE,
-                SYMBOL_COUNT_OVERLAP_PROMPT,
-                SYMBOL_COUNT_VISION_MAP_PROMPT,
-            ],
-            detection_hints=detection_hints,
-            extra_429_retries=(
-                int(config.FOLDER_VISION_429_RETRIES) if folder_vision else 0
-            ),
+            extra_rules=extra_rules,
+            extra_429_retries=int(config.FOLDER_VISION_429_RETRIES),
+            taxonomy=taxonomy,
         )
         llm_summary = {
             "used": llm["ok"],
@@ -724,79 +589,12 @@ def _finalize_counts(
             "model": llm["model"],
             "notes": llm.get("notes"),
             "error": llm.get("error"),
-            "mode": "folder_post_merge" if folder_vision else "single_image",
+            "mode": "folder_post_merge_notes_only",
         }
-        if llm["ok"] and llm["counts"]:
-            disagreements: list[str] = []
-            llm_added: list[str] = []
-            for key, llm_value in llm["counts"].items():
-                if key not in valid_keys or key in linear_keys:
-                    continue
-                cv_value = counts.get(key, 0)
-                cv_marks = mark_counts.get(key, 0)
-                if key == hash_key:
-                    mark_n = mark_counts.get(key, 0)
-                    if qty_summed:
-                        if llm_value and llm_value != cv_value:
-                            notes.append(
-                                f"LLM counted {llm_value} visible '#' mark(s); "
-                                f"kept QTY-expanded jack count {cv_value} "
-                                f"from {mark_n} mark(s)."
-                            )
-                        continue
-                    if folder_vision and mark_n > 0:
-                        # Vision fills CV misses: adopt the higher Gemini count;
-                        # keep CV when the model saw fewer (NMS-merged) marks.
-                        if llm_value > mark_n:
-                            counts[key] = llm_value
-                            notes.append(
-                                f"Folder vision raised '#' mark count "
-                                f"{mark_n} → {llm_value} (Gemini count adopted)."
-                            )
-                        elif llm_value and llm_value != cv_value:
-                            notes.append(
-                                f"LLM saw {llm_value} '#' mark(s); kept CV {cv_value}."
-                            )
-                        continue
-                    if mark_n == 0 and llm_value > 0:
-                        counts[key] = llm_value
-                        llm_added.append(f"{key}={llm_value}")
-                        continue
-                    if not folder_vision and llm_value > 0:
-                        counts[key] = llm_value
-                    continue
-                if llm_value > 0:
-                    if cv_marks == 0 and cv_value == 0:
-                        # Vision fill for CV misses (alphabetic / numeric tags).
-                        counts[key] = llm_value
-                        llm_added.append(f"{key}={llm_value}")
-                        continue
-                    # Prefer unique-instance count: take LLM when it lowers
-                    # double-counts, or raises when CV under-detected.
-                    counts[key] = llm_value
-                elif cv_value > 0:
-                    disagreements.append(key)
-            counts = {k: v for k, v in counts.items() if v > 0 and k in valid_keys}
-            method = (
-                "detect_merge_evaluate_count_llm"
-                if folder_vision
-                else "cv_plus_llm_verify"
-            )
-            if llm_added:
-                notes.append(
-                    "Vision filled CV misses (unique instances): " + ", ".join(llm_added)
-                )
-            if disagreements:
-                notes.append(
-                    "LLM reported 0 for CV-detected symbols (kept CV counts): "
-                    + ", ".join(sorted(disagreements))
-                )
-            if llm.get("notes"):
-                notes.append(f"LLM: {llm['notes']}")
+        if llm.get("notes"):
+            notes.append(f"LLM (notes only, CV counts kept): {llm['notes']}")
         elif llm.get("error"):
             notes.append(f"LLM verification skipped: {llm['error']}")
-        elif folder_vision:
-            notes.append("Folder post-merge vision count verify ran but returned no counts.")
 
     counts = {k: v for k, v in counts.items() if k in valid_keys and v > 0}
     cv_counts = {k: v for k, v in cv_counts.items() if k in valid_keys}
@@ -910,6 +708,12 @@ def count_symbols_in_image_cv(
                 f"Post-detection validation rejected {len(rejected)} false hit(s) "
                 f"(glyph/vision judge on single image)."
             )
+        remapped_n = int((eval_summary or {}).get("remapped") or 0)
+        if remapped_n:
+            notes.append(
+                f"Post-detection validation remapped {remapped_n} mark(s) "
+                f"to a better-matching legend glyph."
+            )
 
     extra: dict[str, Any] = {}
     if eval_summary is not None:
@@ -939,6 +743,14 @@ def run_symbol_count_job(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     legend, glyph_dir = parse_symbol_file(symbol_file, output_dir)
+    try:
+        from pipeline.taxonomy.builder import taxonomy_from_legend
+
+        taxonomy_from_legend(legend, glyph_dir, source=str(symbol_file)).save(
+            output_dir / "symbol_taxonomy.json"
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
     image = Image.open(image_file).convert("RGB")
     payload = count_symbols_in_image_cv(

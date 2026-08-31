@@ -33,24 +33,28 @@ def test_extract_json_handles_markdown_fences():
 
 def test_verify_counts_filters_to_legend_keys():
     response = {
-        "choices": [
+        "candidates": [
             {
-                "message": {
-                    "content": '{"counts": {"R": 3, "AP": "2", "BOGUS": 9}, "notes": "ok"}'
+                "content": {
+                    "parts": [
+                        {
+                            "text": '{"counts": {"R": 3, "AP": "2", "BOGUS": 9}, "notes": "ok"}'
+                        }
+                    ]
                 }
             }
         ]
     }
     img = Image.new("RGB", (64, 64), color=(255, 255, 255))
-    with patch("pipeline.llm_verify._call_groq", return_value=response), patch(
+    with patch("pipeline.llm_verify._call_gemini", return_value=response), patch(
         "pipeline.llm_verify.config.llm_enabled", return_value=True
-    ), patch("pipeline.llm_verify.config.llm_provider", return_value="groq"):
+    ), patch("pipeline.llm_verify.config.llm_provider", return_value="gemini"):
         result = verify_counts_with_llm(img, _legend(), {"R": 1})
 
     assert result["ok"] is True
     assert result["counts"] == {"R": 3, "AP": 2}
     assert result["notes"] == "ok"
-    assert result["provider"] == "groq"
+    assert result["provider"] == "gemini"
 
 
 def test_verify_counts_gemini_provider():
@@ -112,9 +116,9 @@ def test_count_symbols_merges_llm_counts_when_cv_has_marks():
             image=img, legend=_legend(), glyph_dir=None, symbol_file_suffix=".json"
         )
 
-    assert payload["method"] == "cv_plus_llm_verify"
-    assert payload["counts"]["R"] == 4
-    assert payload["llm"]["used"] is True
+    assert payload["method"] == "single_image_cv"
+    assert payload["counts"]["R"] == 1
+    assert payload.get("llm") is None
 
 
 def test_count_symbols_allows_llm_to_fill_cv_misses():
@@ -137,9 +141,9 @@ def test_count_symbols_allows_llm_to_fill_cv_misses():
             image=img, legend=_legend(), glyph_dir=None, symbol_file_suffix=".json"
         )
 
-    assert payload["method"] == "cv_plus_llm_verify"
-    assert payload["counts"].get("R", 0) == 4
-    assert any("Vision filled CV misses" in n for n in payload.get("notes") or [])
+    assert payload["method"] == "single_image_cv"
+    assert payload["counts"].get("R", 0) == 0
+    assert not any("Vision filled CV misses" in n for n in payload.get("notes") or [])
 
 
 def test_cross_source_dedupes_ocr_and_vision():
@@ -187,12 +191,8 @@ def test_cad_construction_knowledge_injected():
         extra_rules=[CAD_CONSTRUCTION_SYMBOL_KNOWLEDGE],
     )
     assert "CONSTRUCTION CAD" in prompt
-    assert "DATA PERMANENT LINK" in prompt
-    assert "5400" in prompt
-    assert "direction" in _SYSTEM_PROMPT.lower()
-    assert "LOOK-ALIKE" in prompt
-    assert "J-HOOK" in prompt
-    assert "CONDUIT STUB" in prompt
+    assert "TAXONOMY_CONTEXT_RULES" in prompt
+    assert "LOOK-ALIKE GLYPHS" not in prompt
 
 
 def test_judge_prompt_rejects_shared_fragments():
@@ -202,92 +202,14 @@ def test_judge_prompt_rejects_shared_fragments():
         "#",
         SymbolEntry(symbol="#", description="DATA PERMANENT LINK"),
     )
-    assert "FULL glyph" in prompt
-    assert "LOOK-ALIKE" in prompt
-    assert "DATA POLE" in prompt
+    assert "TAXONOMY_CONTEXT_RULES" in prompt
+    assert "LOOK-ALIKE GLYPHS" not in prompt
 
 
-def test_detect_legend_symbols_enumerates_legend_and_clamps_boxes():
-    from io import BytesIO
-
+def test_symbol_locate_entrypoint_removed():
     import pipeline.llm_verify as llm_verify
-    from pipeline.llm_verify import detect_legend_symbols_with_llm
 
-    llm_verify._GLYPH_DESC_CACHE.clear()
-    glyph_png = BytesIO()
-    Image.new("RGB", (32, 32), color=(0, 0, 0)).save(glyph_png, format="PNG")
-    legend = SymbolTableInfo(
-        entries=[
-            SymbolEntry(
-                symbol="#",
-                description="DATA PERMANENT LINK",
-                symbol_image_png=glyph_png.getvalue(),
-            ),
-            SymbolEntry(symbol="AP", description="ACCESS POINT"),
-        ]
-    )
-    img = Image.new("RGB", (653, 653), color=(255, 255, 255))
-    reply = {
-        "detections": [
-            {
-                "symbol": "#",
-                "kind": "drop",
-                "qty": 2,
-                "confidence": 0.9,
-                # Oversized box covering most of the tile — must be clamped.
-                "bbox_rel": {"x1": 0.05, "y1": 0.05, "x2": 0.95, "y2": 0.95},
-            },
-            {
-                "symbol": "NORTH ARROW",
-                "qty": 1,
-                "confidence": 0.9,
-                "bbox_rel": {"x1": 0.1, "y1": 0.1, "x2": 0.2, "y2": 0.2},
-            },
-        ],
-        "notes": "ok",
-    }
-    captured: dict = {}
-
-    def fake_call(**kwargs):
-        import json as _json
-
-        # First call: glyph shape description pass for the uploaded legend.
-        if '"glyphs"' in kwargs.get("prompt", ""):
-            return _json.dumps({"glyphs": {"#": "small solid filled triangle"}}), None
-        captured.update(kwargs)
-        return _json.dumps(reply), None
-
-    with patch("pipeline.llm_verify.config.llm_enabled", return_value=True), patch(
-        "pipeline.llm_verify._call_vision_json", side_effect=fake_call
-    ), patch(
-        "pipeline.legend_reference.lookup_descriptions_for_legend", return_value={}
-    ):
-        result = detect_legend_symbols_with_llm(img, legend)
-
-    assert result["ok"] is True
-    prompt = captured["prompt"]
-    assert "VALID_SYMBOLS" in prompt
-    assert "NEVER report" in prompt
-    assert '"name": "#"' in prompt
-    # Shape description from the uploaded technical-symbol sheet is injected.
-    assert '"glyph": "small solid filled triangle"' in prompt
-    assert result.get("glyph_descriptions") == {"#": "small solid filled triangle"}
-    assert "KEY COLUMN" in prompt
-    assert "ONLY a STANDALONE solid FILLED triangle" in prompt or "ONLY a solid FILLED black triangle" in prompt
-    assert "LOOK-ALIKE" in prompt
-    assert "J-HOOK" in prompt
-    # Legend glyph artwork attached as a visual reference.
-    refs = captured.get("reference_images") or []
-    assert len(refs) == 1 and refs[0][0] == "#"
-    assert result["reference_glyphs_attached"] == 1
-    # Bogus non-legend key dropped; oversized box clamped around its center.
-    assert len(result["detections"]) == 1
-    det = result["detections"][0]
-    assert det["symbol"] == "#"
-    max_side = 0.15 * 653
-    assert (det["x2"] - det["x1"]) <= max_side + 1
-    assert (det["y2"] - det["y1"]) <= max_side + 1
-    assert result.get("clamped_boxes") == 1
+    assert not hasattr(llm_verify, "detect_legend_symbols_with_llm")
 
 
 def test_legend_reference_images_skip_linear_and_prioritize_devices():
@@ -365,6 +287,72 @@ def test_lookalike_glyph_refs_forced_even_if_marked_linear():
     refs = _legend_reference_images(legend, linear, max_refs=4)
     labels = [k for k, _ in refs]
     assert labels[:4] == ["#", "AP", "CONDUIT STUB", "J-HOOK (SINGLE/STACKED)"]
+
+
+def test_verify_counts_attaches_legend_glyphs():
+    from io import BytesIO
+
+    captured: dict = {}
+
+    def fake_gemini(image_b64, prompt, reference_images=None):
+        captured["refs"] = [k for k, _ in (reference_images or [])]
+        captured["prompt_mentions_glyphs"] = "legend glyph artwork" in prompt.lower()
+        return {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [{"text": '{"counts": {"AP": 1}, "notes": "ok"}'}]
+                    }
+                }
+            ]
+        }
+
+    buf = BytesIO()
+    Image.new("RGB", (24, 24), color=(12, 34, 56)).save(buf, format="PNG")
+    legend = SymbolTableInfo(
+        entries=[
+            SymbolEntry(
+                symbol="AP",
+                description="ACCESS POINT",
+                symbol_image_png=buf.getvalue(),
+            )
+        ]
+    )
+    img = Image.new("RGB", (64, 64), color=(255, 255, 255))
+    with patch("pipeline.llm_verify._call_gemini", side_effect=fake_gemini), patch(
+        "pipeline.llm_verify.config.llm_enabled", return_value=True
+    ), patch("pipeline.llm_verify.config.llm_provider", return_value="gemini"):
+        result = verify_counts_with_llm(img, legend, {"AP": 1})
+
+    assert result["ok"] is True
+    assert "AP" in captured["refs"]
+    assert captured["prompt_mentions_glyphs"] is True
+
+
+def test_legend_reference_images_from_taxonomy_glyph_file(tmp_path):
+    from io import BytesIO
+
+    from pipeline.llm_verify import _legend_reference_images
+    from pipeline.taxonomy.builder import taxonomy_from_legend
+
+    buf = BytesIO()
+    Image.new("RGB", (24, 24), color=(9, 9, 9)).save(buf, format="PNG")
+    legend = SymbolTableInfo(
+        entries=[
+            SymbolEntry(
+                symbol="#",
+                description="DATA PERMANENT LINK",
+                symbol_image_png=buf.getvalue(),
+            )
+        ]
+    )
+    tax = taxonomy_from_legend(legend, tmp_path)
+    disk_only = SymbolTableInfo(
+        entries=[SymbolEntry(symbol="#", description="DATA PERMANENT LINK")]
+    )
+    refs = _legend_reference_images(disk_only, set(), taxonomy=tax, max_refs=4)
+    assert [k for k, _ in refs] == ["#"]
+    assert (tmp_path / "#.png").is_file()
 
 
 def test_reference_descriptions_never_cross_between_different_sheets(tmp_path):
@@ -457,4 +445,50 @@ def test_count_symbols_keeps_cv_on_llm_failure():
         )
 
     assert payload["method"] == "single_image_cv"
-    assert any("boom" in n for n in payload["notes"])
+    # Count-verify no longer mutates CV results; LLM errors are not a count path.
+    assert payload["counts"] == {}
+
+
+def test_gemini_429_trips_quota_and_skips_next_call():
+    import io
+    import urllib.error
+
+    from pipeline.llm_verify import (
+        GeminiQuotaError,
+        _gemini_generate,
+        gemini_quota_blocked,
+        reset_gemini_quota,
+    )
+
+    reset_gemini_quota()
+    calls = {"n": 0}
+
+    def fake_urlopen(req, timeout=None):
+        calls["n"] += 1
+        raise urllib.error.HTTPError(
+            "https://example/generateContent",
+            429,
+            "Too Many Requests",
+            None,
+            io.BytesIO(b'{"error":{"code":429}}'),
+        )
+
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": "x"}]}],
+        "generationConfig": {"temperature": 0.1},
+    }
+    with patch("pipeline.llm_verify.urllib.request.urlopen", side_effect=fake_urlopen):
+        try:
+            _gemini_generate(payload)
+            assert False, "expected GeminiQuotaError"
+        except GeminiQuotaError:
+            pass
+        assert gemini_quota_blocked()
+        try:
+            _gemini_generate(payload)
+            assert False, "expected skip"
+        except GeminiQuotaError:
+            pass
+    assert calls["n"] == 1
+    reset_gemini_quota()
+    assert not gemini_quota_blocked()

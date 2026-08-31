@@ -77,7 +77,7 @@ def generate_technical_symbol_pdf(
     if not info.entries:
         story.append(
             Paragraph(
-                "No symbol legend or drafting symbols table was "
+                "No symbol legend, drafting symbols, or abbreviations table was "
                 "found in this drawing set.",
                 styles["body"],
             )

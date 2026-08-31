@@ -44,3 +44,40 @@ def test_oversized_single_letter_suppressed():
         neighbor_blob="",
         max_tag_h=40.0,
     )
+
+
+def test_keyplan_regions_from_words_covers_mini_plan():
+    from pipeline.cv.nms import BoundingBox, SymbolDetection, suppress_in_boxes
+    from pipeline.cv.ocr_tags import keyplan_regions_from_words
+
+    regions = keyplan_regions_from_words(
+        [("KEY", 3500.0, 1720.0, 3560.0, 1755.0), ("PLAN", 3570.0, 1720.0, 3680.0, 1755.0)]
+    )
+    assert len(regions) == 1
+    box = regions[0]
+    assert box.x1 < 3500.0
+    assert box.y1 < 1656.0
+    fake = SymbolDetection(
+        symbol="#",
+        box=BoundingBox(3511, 1656, 3535, 1706),
+        score=0.85,
+        source="triangle",
+    )
+    assert suppress_in_boxes([fake], regions) == []
+
+
+def test_title_regions_from_words_covers_wing_label():
+    from pipeline.cv.nms import BoundingBox, SymbolDetection, suppress_in_boxes
+    from pipeline.cv.ocr_tags import title_regions_from_words
+
+    regions = title_regions_from_words(
+        [("A-WING", 1800.0, 380.0, 2100.0, 430.0), ("EAST", 2140.0, 380.0, 2280.0, 430.0)]
+    )
+    assert len(regions) == 1
+    pole = SymbolDetection(
+        symbol="DATA POLE",
+        box=BoundingBox(1927, 433, 2011, 527),
+        score=0.80,
+        source="bowtie",
+    )
+    assert suppress_in_boxes([pole], regions) == []

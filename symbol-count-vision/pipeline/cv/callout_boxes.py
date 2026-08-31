@@ -283,22 +283,7 @@ def reinforce_hash_from_callouts(
             )
             continue
 
-        # No nearby triangle tip — seed a drop at the callout (evidence of a data drop).
-        pad = 12.0
-        updated.append(
-            SymbolDetection(
-                symbol=hash_key,
-                box=BoundingBox(
-                    x1=max(0.0, hx - pad),
-                    y1=max(0.0, hy - pad),
-                    x2=hx + pad,
-                    y2=hy + pad,
-                ),
-                score=0.72,
-                source="callout_drop",
-                qty=hq,
-            )
-        )
+        # Pipe text alone is a keynote, not a legend mark. Do not box 1|5 / 1|13.
 
     return others + updated
 

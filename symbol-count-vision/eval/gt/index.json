@@ -1,0 +1,206 @@
+[
+  {
+    "id": "01_hash_standalone",
+    "image": "crops/01_hash_standalone.png",
+    "width": 653,
+    "height": 653,
+    "instances": [
+      {
+        "key": "#",
+        "qty": 1,
+        "box": {
+          "x1": 100,
+          "y1": 140,
+          "x2": 140,
+          "y2": 180
+        }
+      },
+      {
+        "key": "#",
+        "qty": 1,
+        "box": {
+          "x1": 300,
+          "y1": 300,
+          "x2": 340,
+          "y2": 340
+        }
+      },
+      {
+        "key": "#",
+        "qty": 1,
+        "box": {
+          "x1": 460,
+          "y1": 200,
+          "x2": 500,
+          "y2": 240
+        }
+      }
+    ]
+  },
+  {
+    "id": "02_ap_circle",
+    "image": "crops/02_ap_circle.png",
+    "width": 653,
+    "height": 653,
+    "instances": [
+      {
+        "key": "AP",
+        "qty": 1,
+        "box": {
+          "x1": 270,
+          "y1": 270,
+          "x2": 370,
+          "y2": 370
+        }
+      }
+    ]
+  },
+  {
+    "id": "03_hourglass_camera",
+    "image": "crops/03_hourglass_camera.png",
+    "width": 653,
+    "height": 653,
+    "instances": [
+      {
+        "key": "NETWORK CAMERA",
+        "qty": 1,
+        "box": {
+          "x1": 180,
+          "y1": 300,
+          "x2": 380,
+          "y2": 340
+        }
+      }
+    ]
+  },
+  {
+    "id": "04_bowtie_pole",
+    "image": "crops/04_bowtie_pole.png",
+    "width": 653,
+    "height": 653,
+    "instances": [
+      {
+        "key": "DATA POLE",
+        "qty": 1,
+        "box": {
+          "x1": 276,
+          "y1": 276,
+          "x2": 376,
+          "y2": 376
+        }
+      }
+    ]
+  },
+  {
+    "id": "05_mixed_lookalikes",
+    "image": "crops/05_mixed_lookalikes.png",
+    "width": 653,
+    "height": 653,
+    "instances": [
+      {
+        "key": "#",
+        "qty": 1,
+        "box": {
+          "x1": 60,
+          "y1": 80,
+          "x2": 100,
+          "y2": 120
+        }
+      },
+      {
+        "key": "AP",
+        "qty": 1,
+        "box": {
+          "x1": 70,
+          "y1": 400,
+          "x2": 150,
+          "y2": 480
+        }
+      },
+      {
+        "key": "NETWORK CAMERA",
+        "qty": 1,
+        "box": {
+          "x1": 380,
+          "y1": 90,
+          "x2": 530,
+          "y2": 124
+        }
+      },
+      {
+        "key": "DATA POLE",
+        "qty": 1,
+        "box": {
+          "x1": 430,
+          "y1": 430,
+          "x2": 510,
+          "y2": 510
+        }
+      }
+    ]
+  },
+  {
+    "id": "06_jhook_run",
+    "image": "crops/06_jhook_run.png",
+    "width": 653,
+    "height": 653,
+    "instances": [
+      {
+        "key": "J-HOOK (SINGLE/STACKED)",
+        "qty": 1,
+        "box": {
+          "x1": 140,
+          "y1": 310,
+          "x2": 290,
+          "y2": 350
+        }
+      }
+    ]
+  },
+  {
+    "id": "07_junction_j",
+    "image": "crops/07_junction_j.png",
+    "width": 653,
+    "height": 653,
+    "instances": [
+      {
+        "key": "J",
+        "qty": 1,
+        "box": {
+          "x1": 300,
+          "y1": 300,
+          "x2": 330,
+          "y2": 340
+        }
+      }
+    ]
+  },
+  {
+    "id": "08_dense_wall",
+    "image": "crops/08_dense_wall.png",
+    "width": 653,
+    "height": 653,
+    "instances": [
+      {
+        "key": "SURFACE RACEWAY (WM5400)",
+        "qty": 1,
+        "box": {
+          "x1": 180,
+          "y1": 300,
+          "x2": 310,
+          "y2": 340
+        }
+      },
+      {
+        "key": "#",
+        "qty": 2,
+        "box": {
+          "x1": 385,
+          "y1": 290,
+          "x2": 415,
+          "y2": 325
+        }
+      }
+    ]
+  }
+]

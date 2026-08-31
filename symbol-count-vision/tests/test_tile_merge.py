@@ -14,8 +14,6 @@ from pipeline.cv.nms import (
     BoundingBox,
     SymbolDetection,
     nms_by_class,
-    suppress_hourglass_on_triangles,
-    suppress_triangles_near_tags,
 )
 from pipeline.cv.template_match import _resolve_glyph_label, detect_symbols_from_glyphs
 from pipeline.extraction.symbol_table_extractor import SymbolEntry, SymbolTableInfo
@@ -23,12 +21,15 @@ from pipeline.symbol_count import filter_to_legend, legend_count_keys
 from pipeline.tile_merge import (
     DEFAULT_OVERLAP_PCT,
     DEFAULT_TILE_SIZE,
+    TileSpec,
     estimate_roi_size_from_overlap,
     infer_tiles_from_files,
     infer_tiles_from_snap,
     iter_overlapping_tiles,
+    merge_exclusive_overlap,
     resolve_effective_overlap,
     resolve_tiles,
+    tile_exclusive_bbox,
     tile_step,
     translate_pixel_box_to_roi,
     validate_tile_bboxes,
@@ -39,9 +40,10 @@ def test_tile_step_matches_dual_pathway():
     assert tile_step(1152, 0.20) == 922
     assert tile_step(768, 0.10) == 691
     assert tile_step(653, 0.10) == 588
-    assert tile_step() == 588
+    assert tile_step(588, 0.10) == 529
+    assert tile_step() == 529
     assert DEFAULT_OVERLAP_PCT == 0.10
-    assert DEFAULT_TILE_SIZE == 653
+    assert DEFAULT_TILE_SIZE == 588
 
 
 def test_infer_tiles_bbox_roi_for_adjacent_columns(tmp_path: Path):
@@ -272,73 +274,6 @@ def test_infer_tiles_from_snap_matches_grid(tmp_path: Path):
     assert by_rc_snap == by_rc_grid
 
 
-def test_triangle_suppresses_hourglass_on_same_bbox():
-    tri = SymbolDetection(
-        symbol="#",
-        box=BoundingBox(10, 10, 40, 40),
-        score=0.85,
-        source="triangle",
-        qty=2,
-    )
-    cam = SymbolDetection(
-        symbol="NETWORK CAMERA",
-        box=BoundingBox(12, 12, 42, 42),
-        score=0.8,
-        source="hourglass",
-    )
-    kept = suppress_hourglass_on_triangles([tri, cam])
-    assert len(kept) == 1
-    assert kept[0].source == "triangle"
-
-
-def test_triangle_suppresses_hourglass_when_centers_nearby():
-    """WP-area false camera: IoU ~0.11 but centers within 48px."""
-    tri = SymbolDetection(
-        symbol="#",
-        box=BoundingBox(170, 736, 202, 768),
-        score=0.85,
-        source="triangle",
-        qty=1,
-    )
-    cam = SymbolDetection(
-        symbol="NETWORK CAMERA",
-        box=BoundingBox(156, 744, 178, 771),
-        score=0.8,
-        source="hourglass",
-    )
-    kept = suppress_hourglass_on_triangles([tri, cam])
-    assert len(kept) == 1
-    assert kept[0].source == "triangle"
-
-
-def test_suppress_triangles_near_ap_template():
-    ap = SymbolDetection(
-        symbol="AP",
-        box=BoundingBox(577, 42, 673, 129),
-        score=0.92,
-        source="template",
-    )
-    tri = SymbolDetection(
-        symbol="#",
-        box=BoundingBox(620, 70, 650, 100),
-        score=0.85,
-        source="triangle",
-        qty=2,
-    )
-    drop = SymbolDetection(
-        symbol="#",
-        box=BoundingBox(100, 500, 130, 530),
-        score=0.85,
-        source="triangle",
-        qty=1,
-    )
-    kept = suppress_triangles_near_tags([ap, tri, drop])
-    assert len(kept) == 2
-    assert kept[0].symbol == "AP"
-    assert kept[1].source == "triangle"
-    assert kept[1].box.x1 == 100
-
-
 def test_overlap_pair_maps_to_same_roi_coord():
     """A mark in the extra last-column overlap maps to one ROI x."""
     prev = {"x1": 3455, "y1": 1023, "x2": 4223, "y2": 1791}
@@ -555,3 +490,159 @@ def test_folder_merge_smoke(tmp_path: Path, monkeypatch):
     # One physical mark across both tiles.
     assert payload["mark_counts"].get("#", 0) == 1
     assert payload["counts"].get("#", 0) >= 1
+
+
+def _two_col_tiles():
+    t00 = TileSpec(
+        path=Path("plan_zoom_r00_c00.jpg"),
+        r=0,
+        c=0,
+        bbox_roi={"x1": 0, "y1": 0, "x2": 100, "y2": 100},
+    )
+    t01 = TileSpec(
+        path=Path("plan_zoom_r00_c01.jpg"),
+        r=0,
+        c=1,
+        bbox_roi={"x1": 90, "y1": 0, "x2": 190, "y2": 100},
+    )
+    t10 = TileSpec(
+        path=Path("plan_zoom_r01_c00.jpg"),
+        r=1,
+        c=0,
+        bbox_roi={"x1": 0, "y1": 90, "x2": 100, "y2": 190},
+    )
+    t11 = TileSpec(
+        path=Path("plan_zoom_r01_c01.jpg"),
+        r=1,
+        c=1,
+        bbox_roi={"x1": 90, "y1": 90, "x2": 190, "y2": 190},
+    )
+    by_rc = {(0, 0): t00, (0, 1): t01, (1, 0): t10, (1, 1): t11}
+    return t00, t01, by_rc, t10, t11
+
+
+def test_tile_exclusive_bbox_skips_prior_overlap():
+    t00, t01, by_rc, t10, t11 = _two_col_tiles()
+    e00 = tile_exclusive_bbox(t00, by_rc)
+    assert (e00.x1, e00.y1, e00.x2, e00.y2) == (0, 0, 100, 100)
+    e01 = tile_exclusive_bbox(t01, by_rc)
+    assert e01.x1 == 100
+    assert e01.y1 == 0
+    e10 = tile_exclusive_bbox(t10, by_rc)
+    assert e10.x1 == 0
+    assert e10.y1 == 100
+    e11 = tile_exclusive_bbox(t11, by_rc)
+    assert e11.x1 == 100
+    assert e11.y1 == 100
+
+
+def test_overlap_duplicate_counted_once_from_primary_tile():
+    t00, t01, _by_rc, _t10, _t11 = _two_col_tiles()
+    primary = SymbolDetection(
+        symbol="#",
+        box=BoundingBox(50, 40, 70, 60),
+        score=0.85,
+        source="triangle",
+        qty=2,
+        tile_file="plan_zoom_r00_c00.jpg",
+    )
+    overlap_copy = SymbolDetection(
+        symbol="#",
+        box=BoundingBox(52, 41, 72, 61),
+        score=0.84,
+        source="triangle",
+        qty=2,
+        tile_file="plan_zoom_r00_c01.jpg",
+    )
+    kept, stats = merge_exclusive_overlap(
+        [primary, overlap_copy],
+        [t00, t01],
+        nms_iou=0.3,
+        primary_center_dist=20.0,
+        salvage_center_dist=24.0,
+    )
+    assert len(kept) == 1
+    assert kept[0].tile_file == "plan_zoom_r00_c00.jpg"
+    assert stats["salvage_dropped"] == 1
+    assert stats["salvage_kept"] == 0
+
+
+def test_salvage_keeps_mark_cropped_off_primary_tile():
+    t00, t01, _by_rc, _t10, _t11 = _two_col_tiles()
+    # Only the next zoom sees the glyph (left 10% of tile 2 / right edge of tile 1).
+    salvage = SymbolDetection(
+        symbol="#",
+        box=BoundingBox(91, 40, 99, 56),
+        score=0.86,
+        source="triangle",
+        qty=1,
+        tile_file="plan_zoom_r00_c01.jpg",
+    )
+    kept, stats = merge_exclusive_overlap(
+        [salvage],
+        [t00, t01],
+        nms_iou=0.3,
+        primary_center_dist=20.0,
+        salvage_center_dist=24.0,
+    )
+    assert len(kept) == 1
+    assert kept[0].tile_file == "plan_zoom_r00_c01.jpg"
+    assert stats["salvage_kept"] == 1
+
+
+def test_salvage_replaces_fragment_with_complete_box():
+    t00, t01, _by_rc, _t10, _t11 = _two_col_tiles()
+    fragment = SymbolDetection(
+        symbol="#",
+        box=BoundingBox(88, 42, 99, 54),
+        score=0.70,
+        source="triangle",
+        qty=1,
+        tile_file="plan_zoom_r00_c00.jpg",
+    )
+    complete = SymbolDetection(
+        symbol="#",
+        box=BoundingBox(90, 40, 108, 58),
+        score=0.88,
+        source="triangle",
+        qty=1,
+        tile_file="plan_zoom_r00_c01.jpg",
+    )
+    kept, _stats = merge_exclusive_overlap(
+        [fragment, complete],
+        [t00, t01],
+        nms_iou=0.3,
+        primary_center_dist=20.0,
+        salvage_center_dist=24.0,
+    )
+    assert len(kept) == 1
+    assert kept[0].tile_file == "plan_zoom_r00_c01.jpg"
+    assert kept[0].score == 0.88
+
+
+def test_close_distinct_marks_in_primary_tile_both_kept():
+    t00, t01, _by_rc, _t10, _t11 = _two_col_tiles()
+    a = SymbolDetection(
+        symbol="#",
+        box=BoundingBox(20, 40, 36, 56),
+        score=0.85,
+        source="triangle",
+        qty=1,
+        tile_file="plan_zoom_r00_c00.jpg",
+    )
+    b = SymbolDetection(
+        symbol="#",
+        box=BoundingBox(52, 40, 68, 56),
+        score=0.85,
+        source="triangle",
+        qty=1,
+        tile_file="plan_zoom_r00_c00.jpg",
+    )
+    kept, _stats = merge_exclusive_overlap(
+        [a, b],
+        [t00, t01],
+        nms_iou=0.3,
+        primary_center_dist=20.0,
+        salvage_center_dist=24.0,
+    )
+    assert len(kept) == 2

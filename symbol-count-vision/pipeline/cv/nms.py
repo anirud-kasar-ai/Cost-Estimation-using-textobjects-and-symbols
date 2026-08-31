@@ -19,6 +19,7 @@ class SymbolDetection:
     source: str = "cv"
     qty: int = 1  # per-mark quantity multiplier (drawing convention: # = QTY)
     tile_file: str | None = None  # set for folder jobs (source zoom tile)
+    classify_source: str | None = None  # context_rule | vision_classify | cv_fallback
 
 
 def box_iou(a: BoundingBox, b: BoundingBox) -> float:
@@ -127,130 +128,125 @@ def suppress_cross_source_duplicates(
     return others + kept
 
 
-def _expand_box(box: BoundingBox, *, pad_ratio: float = 0.75) -> BoundingBox:
-    bw = max(1.0, box.x2 - box.x1)
-    bh = max(1.0, box.y2 - box.y1)
-    pad_x = bw * pad_ratio
-    pad_y = bh * pad_ratio
-    return BoundingBox(box.x1 - pad_x, box.y1 - pad_y, box.x2 + pad_x, box.y2 + pad_y)
-
-
-def _center_in_box(cx: float, cy: float, box: BoundingBox) -> bool:
-    return box.x1 <= cx <= box.x2 and box.y1 <= cy <= box.y2
-
-
-def suppress_hourglass_on_triangles(
+def suppress_hash_on_devices(
     detections: list[SymbolDetection],
     *,
+    max_center_dist: float = 32.0,
     iou_threshold: float = 0.12,
-    max_center_dist: float = 48.0,
-    triangle_min_score: float = 0.75,
 ) -> list[SymbolDetection]:
-    """Drop hourglass/camera hits on or beside a high-confidence drop triangle."""
-    triangles = [
-        d for d in detections if d.source == "triangle" and float(d.score) >= triangle_min_score
+    """Drop '#' / triangle hits that sit on a camera hourglass or data-pole bowtie.
+
+    Flanking jack triangles beside a DATA POLE stay; only marks whose center
+    is inside the device box (or that overlap it) are the glyph itself.
+    """
+    devices = [d for d in detections if d.source in {"hourglass", "bowtie"}]
+    if not devices:
+        return detections
+    _ = max_center_dist
+    kept: list[SymbolDetection] = []
+    for det in detections:
+        is_hash = det.source == "triangle" or det.symbol == "#"
+        if not is_hash:
+            kept.append(det)
+            continue
+        dcx, dcy = _center(det.box)
+        covered = False
+        for other in devices:
+            pad = 6.0
+            inside = (
+                other.box.x1 - pad <= dcx <= other.box.x2 + pad
+                and other.box.y1 - pad <= dcy <= other.box.y2 + pad
+            )
+            if inside or box_iou(det.box, other.box) >= iou_threshold:
+                covered = True
+                break
+        if not covered:
+            kept.append(det)
+    return kept
+
+
+def suppress_overlapping_devices(
+    detections: list[SymbolDetection],
+    *,
+    max_center_dist: float = 28.0,
+    iou_threshold: float = 0.12,
+) -> list[SymbolDetection]:
+    """One glyph cannot be both a camera (hourglass) and a data pole (bowtie).
+
+    A square with an X is a DATA POLE. Prefer bowtie when the two overlap.
+    """
+    devices = [d for d in detections if d.source in {"hourglass", "bowtie"}]
+    others = [d for d in detections if d.source not in {"hourglass", "bowtie"}]
+    if len(devices) < 2:
+        return detections
+    ordered = sorted(
+        devices,
+        key=lambda d: (0 if d.source == "bowtie" else 1, -float(d.score)),
+    )
+    kept: list[SymbolDetection] = []
+    for det in ordered:
+        dcx, dcy = _center(det.box)
+        duplicate = False
+        for other in kept:
+            ocx, ocy = _center(other.box)
+            dist = ((dcx - ocx) ** 2 + (dcy - ocy) ** 2) ** 0.5
+            if dist <= max_center_dist or box_iou(det.box, other.box) >= iou_threshold:
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(det)
+    return others + kept
+
+
+def suppress_stub_on_devices(
+    detections: list[SymbolDetection],
+    *,
+    max_center_dist: float = 28.0,
+    iou_threshold: float = 0.12,
+) -> list[SymbolDetection]:
+    """Drop conduit-stub hits that sit on a drop triangle, camera, or pole."""
+    devices = [
+        d
+        for d in detections
+        if d.source in {"triangle", "hourglass", "bowtie", "callout_drop"}
     ]
-    if not triangles:
+    if not devices:
         return detections
     kept: list[SymbolDetection] = []
     for det in detections:
-        if det.source != "hourglass":
+        if det.source != "stub":
             kept.append(det)
             continue
-        ccx = (det.box.x1 + det.box.x2) / 2.0
-        ccy = (det.box.y1 + det.box.y2) / 2.0
-        drop = False
-        for tri in triangles:
-            if box_iou(det.box, tri.box) >= iou_threshold:
-                drop = True
+        dcx, dcy = _center(det.box)
+        covered = False
+        for other in devices:
+            ocx, ocy = _center(other.box)
+            dist = ((dcx - ocx) ** 2 + (dcy - ocy) ** 2) ** 0.5
+            if dist <= max_center_dist or box_iou(det.box, other.box) >= iou_threshold:
+                covered = True
                 break
-            expanded = _expand_box(tri.box, pad_ratio=0.85)
-            if _center_in_box(ccx, ccy, expanded):
-                drop = True
-                break
-            tcx = (tri.box.x1 + tri.box.x2) / 2.0
-            tcy = (tri.box.y1 + tri.box.y2) / 2.0
-            if ((ccx - tcx) ** 2 + (ccy - tcy) ** 2) ** 0.5 <= max_center_dist:
-                drop = True
-                break
-        if not drop:
+        if not covered:
             kept.append(det)
     return kept
 
 
-def suppress_triangles_near_tags(
+def suppress_in_boxes(
     detections: list[SymbolDetection],
-    *,
-    tag_symbols: set[str] | None = None,
-    max_center_dist: float = 70.0,
-    template_pad: float = 40.0,
+    regions: list[BoundingBox],
 ) -> list[SymbolDetection]:
-    """Drop drop-triangle hits sitting on AP/WP and other tagged device glyphs."""
-    tag_symbols = tag_symbols or {"AP", "WP"}
-    tag_symbols = {s.upper() for s in tag_symbols}
-    anchors: list[tuple[float, float, float]] = []
-    for det in detections:
-        sym = (det.symbol or "").strip().upper()
-        if sym not in tag_symbols:
-            continue
-        cx = (det.box.x1 + det.box.x2) / 2.0
-        cy = (det.box.y1 + det.box.y2) / 2.0
-        radius = max_center_dist
-        bw = max(1.0, det.box.x2 - det.box.x1)
-        bh = max(1.0, det.box.y2 - det.box.y1)
-        if det.source == "template":
-            radius = max(max_center_dist, max(bw, bh) * 0.85 + template_pad)
-            if sym == "AP":
-                cy -= bh * 0.45
-        elif sym == "AP":
-            cy -= max(45.0, bh * 1.1)
-        anchors.append((cx, cy, radius))
-
-    if not anchors:
+    """Drop detections whose center sits inside a boilerplate region (KEY PLAN)."""
+    if not regions:
         return detections
     kept: list[SymbolDetection] = []
     for det in detections:
-        if det.source != "triangle":
+        cx, cy = _center(det.box)
+        inside = False
+        for box in regions:
+            if box.x1 <= cx <= box.x2 and box.y1 <= cy <= box.y2:
+                inside = True
+                break
+        if not inside:
             kept.append(det)
-            continue
-        tcx = (det.box.x1 + det.box.x2) / 2.0
-        tcy = (det.box.y1 + det.box.y2) / 2.0
-        if any((tcx - ax) ** 2 + (tcy - ay) ** 2 <= r * r for ax, ay, r in anchors):
-            continue
-        kept.append(det)
-    return kept
-
-
-def suppress_triangles_near_templates(
-    detections: list[SymbolDetection],
-    *,
-    min_center_dist: float = 75.0,
-    pad_ratio: float = 1.15,
-) -> list[SymbolDetection]:
-    """Drop # triangles sitting on any template-matched or bowtie device glyph."""
-    anchors: list[tuple[float, float, float]] = []
-    for det in detections:
-        if det.source not in {"template", "bowtie"}:
-            continue
-        cx = (det.box.x1 + det.box.x2) / 2.0
-        cy = (det.box.y1 + det.box.y2) / 2.0
-        bw = max(1.0, det.box.x2 - det.box.x1)
-        bh = max(1.0, det.box.y2 - det.box.y1)
-        radius = max(min_center_dist, max(bw, bh) * pad_ratio + 20.0)
-        anchors.append((cx, cy, radius))
-
-    if not anchors:
-        return detections
-    kept: list[SymbolDetection] = []
-    for det in detections:
-        if det.source != "triangle":
-            kept.append(det)
-            continue
-        tcx = (det.box.x1 + det.box.x2) / 2.0
-        tcy = (det.box.y1 + det.box.y2) / 2.0
-        if any((tcx - ax) ** 2 + (tcy - ay) ** 2 <= r * r for ax, ay, r in anchors):
-            continue
-        kept.append(det)
     return kept
 
 

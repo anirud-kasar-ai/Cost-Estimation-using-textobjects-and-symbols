@@ -4,7 +4,7 @@
 **Command:**
 
 ```powershell
-cd dual-pathway-drawing-split
+cd drawing-zoom-split
 .\.venv\Scripts\python.exe scripts/run_batch.py `
   --input "D:\Cost Estimation Using Text and Object\Real data" `
   --files 1948BIDDrawings.pdf 1952BIDDrawings-Shadeland-Sunrise010625.pdf 1962BIDMHESDrawings.pdf `
@@ -53,7 +53,7 @@ Example wing folders from `1948BIDDrawings` (T-020 multi-wing sheet):
 
 ## Notes
 
-- Credentials loaded from local `.env` or sibling `vision-extraction/.env` (no secrets copied).
+- Credentials loaded from local `.env` (no secrets copied).
 - Room tags (B, C prefixes) are used for wing boundary placement only; v1 does not export per-room crops.
 - Non-plan pages (schedules, details, cover) correctly skipped per `summary.json`.
 - ROI/zoom artifacts are written per wing-crop instance as `rois/<page_key>/` and `zooms/<page_key>/` to avoid cross-page overwrites.
@@ -67,7 +67,7 @@ Some job folders (generated before ROI/zoom export was added) may have wing crop
 To backfill those artifacts without re-running the LLM:
 
 ```powershell
-cd dual-pathway-drawing-split
+cd drawing-zoom-split
 .\.venv\Scripts\python.exe scripts\backfill_wing_roi_zooms.py 1961BIDDrawings "1961BIDDrawings test"
 .\.venv\Scripts\python.exe scripts\verify_output.py 1961BIDDrawings
 ```
@@ -77,7 +77,7 @@ cd dual-pathway-drawing-split
 Representative Real data PDFs from `Real data/test.md`:
 
 ```powershell
-cd dual-pathway-drawing-split
+cd drawing-zoom-split
 .\.venv\Scripts\python.exe scripts\verify_realdata_roi_zoom.py
 .\.venv\Scripts\python.exe scripts\verify_realdata_roi_zoom.py --backfill-missing
 .\.venv\Scripts\python.exe scripts\run_batch.py `

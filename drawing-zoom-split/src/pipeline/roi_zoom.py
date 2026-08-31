@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw
 from pipeline.diagram_crop import _content_bbox, ink_ratio, plan_mask
 
 
-DEFAULT_TILE_SIZE = 653
+DEFAULT_TILE_SIZE = 588
 DEFAULT_OVERLAP_PCT = 0.10
 # If a tile is nearly blank, skip it to avoid noisy crops.
 DEFAULT_MIN_TILE_INK = 0.002

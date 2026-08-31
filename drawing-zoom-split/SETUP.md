@@ -1,6 +1,6 @@
 # Setup — drawing-zoom-split
 
-Standalone pipeline that turns bid drawing PDFs into cropped wing images and **653px zoom tiles** (10% overlap) for symbol counting.
+Standalone pipeline that turns bid drawing PDFs into cropped wing images and **588px zoom tiles** (10% overlap). Symbol counting is a separate tool (`../symbol-count-vision`).
 
 ## Prerequisites
 
@@ -44,7 +44,7 @@ Edit `.env`:
 |----------|---------|
 | `GROQ_API_KEY` | Required for default Groq vision |
 | `GROQ_MODEL_ID` | Default `qwen/qwen3.6-27b` |
-| `ROI_ZOOM_TILE_SIZE` | Default `653` (matches symbol-count-vision) |
+| `ROI_ZOOM_TILE_SIZE` | Default `588` (10% closer than 653px; matches symbol-count-vision) |
 | `ROI_ZOOM_OVERLAP_PCT` | Default `0.10` |
 
 **Never commit `.env`.** It is listed in `.gitignore`.

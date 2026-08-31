@@ -1,8 +1,8 @@
-/** Typed API client for dual-pathway-drawing-split backend. */
+/** Typed API client for drawing-zoom-split backend. */
 
 import axios from 'axios';
 
-import type { JobDetail, JobSummary, SymbolCountReport } from '../types';
+import type { JobDetail, JobSummary } from '../types';
 
 export const api = axios.create({ baseURL: '/api' });
 
@@ -70,25 +70,6 @@ export async function downloadSheetNotesPdf(jobId: string, filename: string): Pr
   await downloadPdf(
     `/jobs/${jobId}/sheet-notes.pdf`,
     `${filename.replace(/\.pdf$/i, '')} sheet notes.pdf`,
-  );
-}
-
-export async function fetchSymbolCountReport(jobId: string): Promise<SymbolCountReport> {
-  const { data } = await api.get<SymbolCountReport>(`/jobs/${jobId}/symbol-count.json`);
-  return data;
-}
-
-export async function downloadSymbolCountCsv(jobId: string, filename: string): Promise<void> {
-  await downloadPdf(
-    `/jobs/${jobId}/symbol-count.csv`,
-    `${filename.replace(/\.pdf$/i, '')} symbol count.csv`,
-  );
-}
-
-export async function downloadSymbolCountPdf(jobId: string, filename: string): Promise<void> {
-  await downloadPdf(
-    `/jobs/${jobId}/symbol-count.pdf`,
-    `${filename.replace(/\.pdf$/i, '')} symbol count.pdf`,
   );
 }
 

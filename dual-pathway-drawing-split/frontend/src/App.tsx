@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 
 import { errorMessage, getHealth } from './api/client';
+import { DrawingResultsPanel } from './components/DrawingResultsPanel';
 import { JobList } from './components/JobList';
 import { MetadataPanel } from './components/MetadataPanel';
 import { RequirementPanel } from './components/RequirementPanel';
 import { SheetNotesPanel } from './components/SheetNotesPanel';
-import { SymbolCountPanel } from './components/SymbolCountPanel';
 import { TechnicalSymbolPanel } from './components/TechnicalSymbolPanel';
 import { UploadZone } from './components/UploadZone';
 import { useJob, useJobs, useUploadPdf } from './hooks/useJobs';
@@ -19,7 +19,6 @@ const STAGE_LABELS: Record<string, string> = {
   drawing_crop: 'Cropping diagrams…',
   wing_map: 'Mapping wing regions…',
   wing_crop: 'Cutting wing images and zoom tiles…',
-  counting_symbols: 'Counting symbols on wing images with vision model…',
 };
 
 function stageLabel(job: JobDetail): string {
@@ -81,7 +80,7 @@ export default function App() {
               <span className="text-sky-600">Dual-Pathway</span> · Drawing Split
             </h1>
             <p className="text-sm text-slate-400">
-              Upload a construction PDF to extract requirements, split wings, and count symbols per wing.
+              Upload a construction PDF to extract legends, split wings, and export zoom tiles.
             </p>
           </div>
           <p className="text-xs text-slate-400">{healthLine}</p>
@@ -110,7 +109,7 @@ export default function App() {
         <section className="space-y-6">
           {!selectedId && (
             <div className="rounded-xl border border-dashed border-slate-300 bg-white p-16 text-center text-slate-400">
-              Upload a PDF or select a recent job to view extraction results and symbol counts.
+              Upload a PDF or select a recent job to view extraction results, wing crops, and zooms.
             </div>
           )}
 
@@ -143,7 +142,6 @@ export default function App() {
                 hasTechnicalSymbolPdf={Boolean(detail.has_technical_symbol_pdf)}
                 entryCount={detail.symbol_entry_count}
               />
-              <SymbolCountPanel job={detail} />
               <SheetNotesPanel
                 jobId={detail.id}
                 filename={detail.filename}
@@ -151,6 +149,7 @@ export default function App() {
                 itemCount={detail.sheet_notes_item_count}
               />
               {detail.metadata && <MetadataPanel metadata={detail.metadata} />}
+              <DrawingResultsPanel job={detail} />
             </>
           )}
         </section>

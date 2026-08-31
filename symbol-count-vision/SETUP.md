@@ -1,12 +1,12 @@
 # Setup — symbol-count-vision
 
-Standalone FastAPI UI that counts technology-legend symbols on plan tiles or zoom folders (CV + optional Gemini/Groq vision).
+Standalone FastAPI UI that counts technology-legend symbols on plan tiles or zoom folders (CV + Gemini vision).
 
 ## Prerequisites
 
 - Python **3.10+** (3.11 recommended)
 - [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) on `PATH` (or set `TESSERACT_CMD` in `.env`)
-- API key for **Gemini** and/or **Groq** if vision LLM features are enabled
+- API key for **Gemini** if vision LLM features are enabled
 
 ## 1. Create venv and install
 
@@ -36,15 +36,16 @@ copy .env.example .env
 cp .env.example .env
 ```
 
-Edit `.env` and set **only** the keys you use:
+Edit `.env` and set:
 
 | Variable | Purpose |
 |----------|---------|
-| `GEMINI_API_KEY` | Google AI Studio / Gemini API key |
-| `GROQ_API_KEY` | Groq API key |
-| `LLM_PROVIDER` | `gemini` or `groq` |
-| `GEMINI_MODEL` | Detection/count model. `gemini-2.5-flash` is requested first; this API often returns 404 (retired for new users). There is no Gemini 2.6. Set `GEMINI_FALLBACK_MODEL=gemini-3.5-flash,gemini-3.6-flash`. |
-| `GEMINI_FALLBACK_MODEL` | Comma-separated models tried on 404/429 |
+| `GEMINI_API_KEY` | Google AI Studio / Gemini API key (required for classify + count-verify) |
+| `GEMINI_MODEL` | Primary vision model. Default `gemini-3.7-flash`. |
+| `GEMINI_FALLBACK_MODEL` | Tried only on HTTP 404. Default `gemini-3.5-flash`. |
+| `VISION_CLASSIFY_MAX_PER_TILE` | Gemini Pro labels for ambiguous crops (camera vs pole vs `#`). Default `4`. `0` = CV only. |
+| `MERGE_EVAL_MAX_JUDGE_CALLS` | Post-merge Pro checks on cameras/poles. Default `16`. |
+| `VISION_DETECT_MAX_REFS` | Max legend glyph crops attached to classify and count-verify |
 | `TESSERACT_CMD` | Full path to `tesseract.exe` if not on PATH |
 
 **Never commit `.env`.** It is listed in `.gitignore`.
@@ -67,7 +68,7 @@ Open http://127.0.0.1:8767
 Typical zoom folder path after dual-pathway processing:
 
 ```text
-drawing-zoom-split/storage/jobs/<job>/04_wings/<WING>/zooms/page_XXX/
+dual-pathway-drawing-split/storage/jobs/<job>/04_wings/<WING>/zooms/page_XXX/
 ```
 
 Jobs are written under `storage/jobs/<job_id>/` (ignored by git).

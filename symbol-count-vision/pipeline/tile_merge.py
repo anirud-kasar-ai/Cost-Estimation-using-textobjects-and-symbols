@@ -1,7 +1,7 @@
 """Merge symbol detections across overlapping ROI zoom tiles.
 
 Mirrors dual-pathway ``roi_zoom.iter_overlapping_tiles``:
-  - tile size 653 (dual-pathway default), overlap 10% (step ~588)
+  - tile size 588 (dual-pathway default), overlap 10% (step ~529)
   - last row/column snap to the ROI edge (extra overlap, still full tile crops)
   - class-wise NMS in ROI pixel space (count each physical mark once)
 
@@ -12,9 +12,12 @@ Never detect on a stitched mosaic.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -27,8 +30,13 @@ from pipeline.cv.nms import (
     nms_by_class,
     suppress_cross_label,
     suppress_cross_source_duplicates,
+    suppress_hash_on_devices,
+    suppress_in_boxes,
     suppress_nearby_same_label,
+    suppress_overlapping_devices,
+    suppress_stub_on_devices,
 )
+from pipeline.cv.ocr_tags import find_keyplan_regions
 from pipeline.merge_evaluator import evaluate_merged_detections
 from pipeline.overlay import draw_detections_on_image, draw_detections_overlay
 from pipeline.symbol_count import (
@@ -39,14 +47,15 @@ from pipeline.symbol_count import (
 )
 from pipeline.symbol_legend import parse_symbol_file
 
-# Match dual-pathway ``ROI_ZOOM_TILE_SIZE`` / ``ROI_ZOOM_OVERLAP_PCT`` (653 @ 10%).
-DEFAULT_TILE_SIZE = 653
+# Match dual-pathway ``ROI_ZOOM_TILE_SIZE`` / ``ROI_ZOOM_OVERLAP_PCT`` (588 @ 10%).
+DEFAULT_TILE_SIZE = 588
 DEFAULT_OVERLAP_PCT = 0.10
 TILE_NAME_RE = re.compile(
     r"plan_zoom_r(\d+)_c(\d+)\.(jpg|jpeg|png|webp)$",
     re.IGNORECASE,
 )
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
+logger = logging.getLogger(__name__)
 
 
 def _median(values: list[int]) -> int:
@@ -347,6 +356,168 @@ def translate_pixel_box_to_roi(
         x2=tx1 + box.x2 * sx,
         y2=ty1 + box.y2 * sy,
     )
+
+
+def _roi_center(box: BoundingBox) -> tuple[float, float]:
+    return ((box.x1 + box.x2) / 2.0, (box.y1 + box.y2) / 2.0)
+
+
+def _roi_area(box: BoundingBox) -> float:
+    return max(0.0, box.x2 - box.x1) * max(0.0, box.y2 - box.y1)
+
+
+def tile_exclusive_bbox(
+    tile: TileSpec,
+    by_rc: dict[tuple[int, int], TileSpec],
+) -> BoundingBox:
+    """ROI box this tile owns for counting.
+
+    Raster order: tile (0,0) owns its full crop. Each later tile skips the
+    strip already owned by the left neighbor (column overlap) and the
+    neighbor above (row overlap). Detection still runs on the full zoom;
+    only counting uses this exclusive region.
+    """
+    b = tile.bbox_roi
+    x1, y1 = float(b["x1"]), float(b["y1"])
+    x2, y2 = float(b["x2"]), float(b["y2"])
+    orig_x1, orig_y1 = x1, y1
+    left = by_rc.get((tile.r, tile.c - 1))
+    above = by_rc.get((tile.r - 1, tile.c))
+    if left is not None:
+        x1 = max(x1, float(left.bbox_roi["x2"]))
+    if above is not None:
+        y1 = max(y1, float(above.bbox_roi["y2"]))
+    min_span = 8.0
+    if x1 >= x2:
+        x1 = max(orig_x1, x2 - min_span)
+    if y1 >= y2:
+        y1 = max(orig_y1, y2 - min_span)
+    return BoundingBox(x1, y1, x2, y2)
+
+
+def _center_in_exclusive(box: BoundingBox, exclusive: BoundingBox) -> bool:
+    cx, cy = _roi_center(box)
+    return exclusive.x1 <= cx < exclusive.x2 and exclusive.y1 <= cy < exclusive.y2
+
+
+def _source_rank(det: SymbolDetection) -> int:
+    src = (det.source or "").strip().lower()
+    if src in {"hourglass", "bowtie"}:
+        return 4
+    if src in {"ocr", "template"}:
+        return 3
+    if src in {"triangle", "callout_drop"}:
+        return 2
+    return 1
+
+
+def _more_complete(a: SymbolDetection, b: SymbolDetection) -> bool:
+    """Prefer the fuller crop of the same physical mark (not the fragment)."""
+    return (
+        _source_rank(a),
+        _roi_area(a.box),
+        max(1, int(a.qty)),
+        float(a.score),
+    ) > (
+        _source_rank(b),
+        _roi_area(b.box),
+        max(1, int(b.qty)),
+        float(b.score),
+    )
+
+
+def _same_physical_mark(
+    a: SymbolDetection,
+    b: SymbolDetection,
+    *,
+    center_dist: float,
+    iou_threshold: float,
+) -> bool:
+    from pipeline.cv.nms import box_iou
+
+    iou = box_iou(a.box, b.box)
+    if a.symbol == b.symbol:
+        acx, acy = _roi_center(a.box)
+        bcx, bcy = _roi_center(b.box)
+        dist = ((acx - bcx) ** 2 + (acy - bcy) ** 2) ** 0.5
+        return dist <= center_dist or iou >= iou_threshold
+    # Different legend keys: only merge when the ink is the same box
+    # (split glyph labeled '#' on one tile and CAMERA on the next).
+    return iou >= max(0.35, iou_threshold)
+
+
+def merge_exclusive_overlap(
+    detections: list[SymbolDetection],
+    tiles: list[TileSpec],
+    *,
+    nms_iou: float,
+    primary_center_dist: float,
+    salvage_center_dist: float,
+) -> tuple[list[SymbolDetection], dict[str, int]]:
+    """Count each mark once using tile-1-primary / later-tile skip-overlap.
+
+    1. Detect on the **full** zoom (including the 10% overlap) so a symbol
+       cropped on tile N can still be seen on tile N+1.
+    2. A detection whose center sits in this tile's exclusive region is
+       **primary** (tile 1 keeps everything; later tiles skip the overlap).
+    3. A detection in the skipped overlap is **salvage**: keep it only when
+       the earlier tile missed the mark (tiny fragment), and never as a
+       second count. If both fired, keep the more complete box.
+    """
+    if not tiles:
+        return list(detections), {
+            "primary": len(detections),
+            "salvage_candidates": 0,
+            "salvage_kept": 0,
+            "salvage_dropped": 0,
+        }
+
+    by_rc = {(t.r, t.c): t for t in tiles}
+    exclusive_by_file = {t.path.name: tile_exclusive_bbox(t, by_rc) for t in tiles}
+
+    primary: list[SymbolDetection] = []
+    salvage: list[SymbolDetection] = []
+    for det in detections:
+        excl = exclusive_by_file.get(det.tile_file or "")
+        if excl is None or _center_in_exclusive(det.box, excl):
+            primary.append(det)
+        else:
+            salvage.append(det)
+
+    kept = nms_by_class(
+        primary, iou_threshold=nms_iou, center_dist=primary_center_dist
+    )
+    salvage_kept = 0
+    salvage_dropped = 0
+    iou_thr = max(0.12, float(nms_iou) * 0.4)
+    ordered_salvage = sorted(
+        salvage,
+        key=lambda d: (_source_rank(d), _roi_area(d.box), float(d.score)),
+        reverse=True,
+    )
+    for det in ordered_salvage:
+        match_idx: int | None = None
+        for i, other in enumerate(kept):
+            if _same_physical_mark(
+                det, other, center_dist=salvage_center_dist, iou_threshold=iou_thr
+            ):
+                match_idx = i
+                break
+        if match_idx is None:
+            kept.append(det)
+            salvage_kept += 1
+            continue
+        salvage_dropped += 1
+        if _more_complete(det, kept[match_idx]):
+            kept[match_idx] = det
+
+    stats = {
+        "primary": len(primary),
+        "salvage_candidates": len(salvage),
+        "salvage_kept": salvage_kept,
+        "salvage_dropped": salvage_dropped,
+    }
+    return kept, stats
 
 
 def iter_overlapping_tiles(
@@ -784,6 +955,29 @@ def build_roi_canvas(
     return canvas
 
 
+def _detect_one_folder_tile(
+    tile: TileSpec,
+    *,
+    legend: Any,
+    glyph_dir: Path | None,
+    symbol_file_suffix: str,
+    nms_iou: float,
+) -> tuple[TileSpec, tuple[int, int], list[SymbolDetection], list[str], dict[str, Any]]:
+    image = Image.open(tile.path).convert("RGB")
+    logger.info("Detect %s", tile.path.name)
+    dets, tile_notes, tile_meta_det = detect_symbols_raw(
+        image=image,
+        legend=legend,
+        glyph_dir=glyph_dir,
+        symbol_file_suffix=symbol_file_suffix,
+        nms_iou=nms_iou,
+        apply_local_nms=False,
+        use_vision_ocr=None,
+        exclude_top_pct=0.0,
+    )
+    return tile, image.size, dets, tile_notes, tile_meta_det
+
+
 def count_symbols_on_zoom_folder(
     *,
     legend: Any,
@@ -804,6 +998,9 @@ def count_symbols_on_zoom_folder(
       6. finalize counts; overlay drawn on ``full_wing`` when present
     """
     nms_iou = float(nms_iou if nms_iou is not None else config.SYMBOL_COUNT_NMS_IOU)
+    from pipeline.llm_verify import gemini_quota_blocked, reset_gemini_quota
+
+    reset_gemini_quota()
     tiles, tile_meta = resolve_tiles(tiles_dir, manifest_path=manifest_path)
     if not tiles:
         raise RuntimeError("No zoom tile images found in the uploaded folder.")
@@ -831,12 +1028,13 @@ def count_symbols_on_zoom_folder(
         or alignment_confidence(tile_meta, has_full_wing=full_wing is not None),
     }
     notes: list[str] = [
-        "Pipeline: detect each zoom tile → map via bbox_roi metadata → "
-        "NMS merge → evaluate on full_wing → count "
+        "Pipeline: detect each full zoom tile (overlap included) → map via "
+        "bbox_roi → exclusive-region count (tile 1 owns overlap; later tiles "
+        "skip it unless a cropped mark was missed) → evaluate on full_wing → count "
         f"({len(tiles)} tile(s), source={tile_meta.get('source')}, "
         f"tile={tile_size}px, overlap={overlap_pct:.0%} ({overlap_px}px), "
         f"ROI={tile_meta.get('roi_size')}, align={tile_meta.get('alignment_confidence')}, "
-        f"NMS IoU={nms_iou} + center {center_dist:.0f}px)."
+        f"NMS IoU={nms_iou})."
     ]
     notes.extend(overlap_warnings)
     notes.extend(tile_meta.get("bbox_warnings") or [])
@@ -867,34 +1065,40 @@ def count_symbols_on_zoom_folder(
         "glyphs_available": False,
     }
 
-    # --- Phase 1: DETECT (per tile; no stitch) ---
+    # --- Phase 1: DETECT (per tile; no stitch; full zoom including overlap) ---
     tile_detection_records: list[dict[str, Any]] = []
     pooled: list[SymbolDetection] = []
     raw_total = 0
+    by_rc = {(t.r, t.c): t for t in tiles}
 
-    for tile_idx, tile in enumerate(tiles):
-        image = Image.open(tile.path).convert("RGB")
-        dets, tile_notes, tile_meta_det = detect_symbols_raw(
-            image=image,
-            legend=legend,
-            glyph_dir=glyph_dir,
-            symbol_file_suffix=symbol_file_suffix,
-            nms_iou=nms_iou,
-            apply_local_nms=False,
-            # Per-tile Gemini vision OCR + symbol locate when FOLDER_USE_VISION_OCR
-            # (costly; user-requested for max recall).
-            use_vision_ocr=bool(config.FOLDER_USE_VISION_OCR),
-            exclude_top_pct=0.0,
+    detect_one = partial(
+        _detect_one_folder_tile,
+        legend=legend,
+        glyph_dir=glyph_dir,
+        symbol_file_suffix=symbol_file_suffix,
+        nms_iou=nms_iou,
+    )
+    workers = max(1, min(int(config.TILE_DETECT_WORKERS), len(tiles)))
+    if workers <= 1:
+        detected = [detect_one(tile) for tile in tiles]
+    else:
+        notes.append(f"Detecting {len(tiles)} zoom tiles with {workers} parallel workers.")
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            detected = list(pool.map(detect_one, tiles))
+
+    if config.llm_enabled():
+        notes.append(
+            "Folder detect: CV candidates + context rules; vision classify "
+            f"only on ambiguous crops ({config.llm_model()}, "
+            f"cap {config.VISION_CLASSIFY_MAX_PER_TILE}/tile)."
         )
-        if config.FOLDER_USE_VISION_OCR and tile_idx == 0:
-            notes.append(
-                "Folder detect: per-tile Gemini vision OCR + symbol locate ENABLED "
-                f"({config.llm_model()}) — slower/costlier, higher recall."
-            )
-            for n in tile_notes:
-                if "Vision symbol locate skipped" in n or "Vision OCR" in n:
-                    notes.append(f"{tile.path.name}: {n}")
-                    break
+    if gemini_quota_blocked():
+        notes.append(
+            "Gemini quota hit mid-job; remaining tiles used CV labels only."
+        )
+
+    for tile, image_size, dets, _tile_notes, tile_meta_det in detected:
+        excl = tile_exclusive_bbox(tile, by_rc)
         raw_total += len(dets)
         if tile_meta_det.get("linear_keys"):
             meta["linear_keys"] = set(tile_meta_det["linear_keys"]) | set(
@@ -915,7 +1119,7 @@ def count_symbols_on_zoom_folder(
                 "y2": det.box.y2,
             }
             roi_box = translate_pixel_box_to_roi(
-                det.box, tile.bbox_roi, image_size=image.size
+                det.box, tile.bbox_roi, image_size=image_size
             )
             local_items.append(
                 {
@@ -949,7 +1153,22 @@ def count_symbols_on_zoom_folder(
                 "r": tile.r,
                 "c": tile.c,
                 "bbox_roi": dict(tile.bbox_roi),
-                "image_size": [int(image.size[0]), int(image.size[1])],
+                "exclusive_bbox_roi": {
+                    "x1": excl.x1,
+                    "y1": excl.y1,
+                    "x2": excl.x2,
+                    "y2": excl.y2,
+                },
+                "overlap": {
+                    "skip_left_px": max(0.0, excl.x1 - float(tile.bbox_roi["x1"])),
+                    "skip_top_px": max(0.0, excl.y1 - float(tile.bbox_roi["y1"])),
+                    "count_role": (
+                        "primary_full"
+                        if tile.r == 0 and tile.c == 0
+                        else "skip_prior_overlap"
+                    ),
+                },
+                "image_size": [int(image_size[0]), int(image_size[1])],
                 "detection_count": len(local_items),
                 "detections": local_items,
             }
@@ -977,33 +1196,53 @@ def count_symbols_on_zoom_folder(
             + ", ".join(sorted(meta["linear_keys"]))
         )
 
-    # --- Phase 2: MERGE in ROI space (metadata-aligned) ---
+    # --- Phase 2: MERGE — exclusive ownership + salvage cropped marks ---
     pooled = filter_to_legend(pooled, valid_keys)
-    kept = nms_by_class(pooled, iou_threshold=nms_iou, center_dist=center_dist)
+    primary_center = min(22.0, max(16.0, float(overlap_px) * 0.22))
+    salvage_center = min(28.0, max(18.0, float(overlap_px) * 0.30))
+    kept, overlap_stats = merge_exclusive_overlap(
+        pooled,
+        tiles,
+        nms_iou=nms_iou,
+        primary_center_dist=primary_center,
+        salvage_center_dist=salvage_center,
+    )
+    notes.append(
+        "Overlap count: tile (0,0) keeps its full crop; later tiles skip the "
+        f"shared {overlap_pct:.0%} band unless the earlier tile missed a "
+        f"cropped mark (salvage kept {overlap_stats.get('salvage_kept', 0)}, "
+        f"dropped {overlap_stats.get('salvage_dropped', 0)} duplicate(s))."
+    )
     kept = suppress_cross_label(kept, iou_threshold=0.5, source="template")
     kept = suppress_nearby_same_label(
-        kept, source="ocr", max_center_dist=max(80.0, center_dist)
-    )
-    kept = suppress_nearby_same_label(
-        kept, source="vision_ocr", max_center_dist=max(80.0, center_dist)
-    )
-    kept = suppress_nearby_same_label(
-        kept, source="vision_detect", max_center_dist=max(80.0, center_dist)
+        kept, source="ocr", max_center_dist=max(48.0, min(center_dist, 36.0))
     )
     kept = suppress_cross_source_duplicates(
         kept,
-        sources={"ocr", "vision_ocr", "vision_detect", "template"},
-        max_center_dist=max(36.0, center_dist * 0.75),
+        sources={"ocr", "triangle", "hourglass", "bowtie", "stub", "jhook", "callout_drop"},
+        max_center_dist=max(18.0, min(primary_center, 24.0)),
         iou_threshold=0.15,
     )
+    kept = suppress_overlapping_devices(kept)
+    kept = suppress_hash_on_devices(kept)
+    kept = suppress_stub_on_devices(kept)
     kept = filter_to_legend(kept, valid_keys)
-    post_merge_count = len(kept)
 
     # --- Phase 3: EVALUATE on full_wing (glyph + vision judge) ---
     roi_image = build_roi_canvas(
         tiles,
         full_wing_path=full_wing if full_wing is not None else None,
     )
+    keyplan = find_keyplan_regions(roi_image)
+    if keyplan:
+        before = len(kept)
+        kept = suppress_in_boxes(kept, keyplan)
+        dropped = before - len(kept)
+        if dropped:
+            notes.append(
+                f"Dropped {dropped} detection(s) on KEY PLAN / title inset."
+            )
+    post_merge_count = len(kept)
     evaluated, eval_summary = evaluate_merged_detections(
         roi_image=roi_image,
         legend=legend,
@@ -1016,7 +1255,13 @@ def count_symbols_on_zoom_folder(
     notes.append(
         f"Evaluation: {post_merge_count} merged → {eval_summary.get('accepted', 0)} accepted / "
         f"{eval_summary.get('rejected', 0)} rejected "
-        f"({eval_summary.get('judged', 0)} vision-judged)."
+        f"({eval_summary.get('judged', 0)} vision-judged"
+        + (
+            f", {eval_summary.get('remapped', 0)} remapped to a better glyph"
+            if eval_summary.get("remapped")
+            else ""
+        )
+        + ")."
     )
 
     use_folder_vision = bool(
@@ -1054,6 +1299,7 @@ def count_symbols_on_zoom_folder(
             "tile_merge": tile_meta,
             "overlap_deduped": True,
             "overlap_px": overlap_px,
+            "overlap_stats": overlap_stats,
             "center_dist_px": center_dist,
             "full_wing": full_wing.name if full_wing is not None else None,
             "tile_detections": tile_detection_records,
@@ -1099,6 +1345,7 @@ def run_symbol_count_folder_job(
                 "accepted": eval_summary.get("accepted"),
                 "rejected": eval_summary.get("rejected"),
                 "judged": eval_summary.get("judged"),
+                "remapped": eval_summary.get("remapped"),
                 "rejected_by_reason": eval_summary.get("rejected_by_reason"),
                 "rejected_detections": payload.get("rejected_detections") or [],
             },
@@ -1195,8 +1442,10 @@ __all__ = [
     "validate_tile_bboxes",
     "iter_overlapping_tiles",
     "load_tiles_from_manifest",
+    "merge_exclusive_overlap",
     "resolve_tiles",
     "run_symbol_count_folder_job",
+    "tile_exclusive_bbox",
     "tile_step",
     "translate_pixel_box_to_roi",
 ]

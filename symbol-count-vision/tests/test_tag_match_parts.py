@@ -58,3 +58,12 @@ def test_match_span_2300_dash():
     assert match_span_to_text_key("2300-", keys, size=14) == "SURFACE RACEWAY (WM2300)"
     assert match_span_to_text_key("2300", keys, size=14) == "SURFACE RACEWAY (WM2300)"
     assert match_span_to_text_key("WM5400", keys, size=14) == "SURFACE RACEWAY (WM5400)"
+
+
+def test_match_span_does_not_collapse_neighbor_models():
+    keys = text_legend_keys(_raceway_legend())
+    assert match_span_to_text_key("5410", keys, size=14) is None
+    assert match_span_to_text_key("5420", keys, size=14) is None
+    assert match_span_to_text_key("5500", keys, size=14) is None
+    assert match_span_to_text_key("9300", keys, size=14) is None
+    assert match_span_to_text_key("230Q", keys, size=14) == "SURFACE RACEWAY (WM2300)"

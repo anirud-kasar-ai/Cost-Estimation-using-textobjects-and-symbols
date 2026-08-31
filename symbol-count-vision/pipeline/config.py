@@ -9,15 +9,20 @@ ROOT = Path(__file__).resolve().parent.parent
 
 load_dotenv(ROOT / ".env", override=True)
 
-_sibling_env = ROOT.parent / "vision-extraction" / ".env"
-if _sibling_env.is_file():
+for _sibling in (
+    ROOT.parent / "dual-pathway-drawing-split" / ".env",
+    ROOT.parent / "drawing-zoom-split" / ".env",
+):
+    if not _sibling.is_file():
+        continue
     from dotenv import dotenv_values
 
-    for _key, _val in dotenv_values(_sibling_env).items():
+    for _key, _val in dotenv_values(_sibling).items():
         if not _key or _val is None:
             continue
         if not (os.getenv(_key) or "").strip():
             os.environ[_key] = str(_val)
+    break
 
 
 STORAGE_DIR = ROOT / "storage" / "jobs"
@@ -83,28 +88,23 @@ CV_TEMPLATE_SCALES = _float_list(
 )
 CV_TEMPLATE_MIN_SIZE = _int("CV_TEMPLATE_MIN_SIZE", 12)
 CV_TITLE_BAND_PCT = _float("CV_TITLE_BAND_PCT", 0.12)
-SYMBOL_COUNT_NMS_IOU = _float("SYMBOL_COUNT_NMS_IOU", 0.5)
+# Tighter default: CV contour boxes are exact, so 0.3 IoU is enough to merge
+# the same mark across overlapping tiles without swallowing neighbours.
+SYMBOL_COUNT_NMS_IOU = _float("SYMBOL_COUNT_NMS_IOU", 0.3)
 SYMBOL_COUNT_SYNC_JOBS = _bool("SYMBOL_COUNT_SYNC_JOBS", False)
 TESSERACT_CMD = os.getenv("TESSERACT_CMD", "").strip()
 
-# Advanced mode: vision LLM verifies/refines the CV counts.
-# LLM_PROVIDER: gemini | groq  (gemini preferred for free-tier vision testing)
-LLM_PROVIDER = (os.getenv("LLM_PROVIDER", "groq") or "groq").strip().lower()
+# Vision classify + count-verify: Gemini only (no Groq / Llama).
+LLM_PROVIDER = "gemini"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
-# Comma-separated fallbacks on 404/429. Gemini 2.5 is retired for many new
-# keys (use 3.5/3.6 Flash). There is no Gemini 2.6.
+# Pin Flash 3.7 (higher quota than Pro). 404 only → 3.5-flash.
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.7-flash").strip()
 GEMINI_FALLBACK_MODEL = os.getenv(
-    "GEMINI_FALLBACK_MODEL", "gemini-3.5-flash,gemini-3.6-flash"
+    "GEMINI_FALLBACK_MODEL", "gemini-3.5-flash"
 ).strip()
 GEMINI_API_BASE = os.getenv(
     "GEMINI_API_BASE", "https://generativelanguage.googleapis.com/v1beta"
 ).strip().rstrip("/")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.6-27b").strip()
-GROQ_API_URL = os.getenv(
-    "GROQ_API_URL", "https://api.groq.com/openai/v1/chat/completions"
-).strip()
 SYMBOL_COUNT_USE_LLM = _bool("SYMBOL_COUNT_USE_LLM", True)
 SYMBOL_COUNT_USE_VISION_OCR = _bool("SYMBOL_COUNT_USE_VISION_OCR", True)
 VISION_OCR_EXPECTED_CONTEXT = (
@@ -114,8 +114,8 @@ VISION_OCR_EXPECTED_CONTEXT = (
     )
     or "Low-Voltage Callouts, Equipment Tags, Raceway Dimensions, Room Labels"
 ).strip()
-LLM_MAX_IMAGE_DIM = _int("LLM_MAX_IMAGE_DIM", 2048)
-LLM_TIMEOUT_S = _float("LLM_TIMEOUT_S", 120.0)
+LLM_MAX_IMAGE_DIM = _int("LLM_MAX_IMAGE_DIM", 1280)
+LLM_TIMEOUT_S = _float("LLM_TIMEOUT_S", 30.0)
 
 # Post-merge evaluation (folder jobs): glyph re-check + vision judge on flagged hits.
 MERGE_EVAL_ENABLED = _bool("MERGE_EVAL_ENABLED", True)
@@ -123,25 +123,52 @@ MERGE_EVAL_GLYPH_MIN = _float("MERGE_EVAL_GLYPH_MIN", 0.55)
 MERGE_EVAL_GLYPH_REJECT = _float("MERGE_EVAL_GLYPH_REJECT", 0.45)
 MERGE_EVAL_JUDGE_MIN_SCORE = _float("MERGE_EVAL_JUDGE_MIN_SCORE", 0.65)
 MERGE_EVAL_JUDGE_SOURCES = (
-    os.getenv("MERGE_EVAL_JUDGE_SOURCES", "ocr,template,vision_ocr,vision_detect")
-    or "ocr,template,vision_ocr,vision_detect"
+    os.getenv("MERGE_EVAL_JUDGE_SOURCES", "hourglass,bowtie")
+    or "hourglass,bowtie"
 ).strip().lower()
-MERGE_EVAL_MAX_JUDGE_CALLS = _int("MERGE_EVAL_MAX_JUDGE_CALLS", 80)
+# Pro judges cameras/poles after merge. 0 = CV-only (faster, more FPs).
+MERGE_EVAL_MAX_JUDGE_CALLS = _int("MERGE_EVAL_MAX_JUDGE_CALLS", 16)
 MERGE_EVAL_GEOMETRY_AUTO_ACCEPT = _float("MERGE_EVAL_GEOMETRY_AUTO_ACCEPT", 0.80)
 
-# Folder zoom jobs: warn when zooms_manifest.json is missing; one post-merge LLM verify.
+# Folder zoom jobs: warn when zooms_manifest.json is missing.
 SYMBOL_COUNT_REQUIRE_MANIFEST_WARN = _bool("SYMBOL_COUNT_REQUIRE_MANIFEST_WARN", True)
-FOLDER_VISION_COUNT_VERIFY = _bool("FOLDER_VISION_COUNT_VERIFY", True)
-# Per-tile Gemini vision OCR + symbol locate on folder zoom jobs (costly; accurate).
-FOLDER_USE_VISION_OCR = _bool("FOLDER_USE_VISION_OCR", True)
-# Legend glyph crops attached to the vision detect call as visual references.
-VISION_DETECT_MAX_REFS = _int("VISION_DETECT_MAX_REFS", 14)
+# Post-merge count-verify must not invent boxes; default off (CV counts win).
+FOLDER_VISION_COUNT_VERIFY = _bool("FOLDER_VISION_COUNT_VERIFY", False)
+# Per-tile vision locate is removed. Ambiguous crops use vision_classify instead.
+FOLDER_USE_VISION_OCR = _bool("FOLDER_USE_VISION_OCR", False)
+VISION_CLASSIFY_MARGIN_PX = _int("VISION_CLASSIFY_MARGIN_PX", 8)
+VISION_OCR_FALLBACK_CONF = _float("VISION_OCR_FALLBACK_CONF", 60.0)
+# Ambiguous look-alikes only (camera vs pole vs #). 0 = CV labels only.
+VISION_CLASSIFY_MAX_PER_TILE = _int("VISION_CLASSIFY_MAX_PER_TILE", 4)
+# Parallel OpenCV/OCR across zoom tiles. Gemini calls stay serialized.
+TILE_DETECT_WORKERS = _int("TILE_DETECT_WORKERS", 4)
+# Upright OCR only by default. "0,90,270" restores rotated-tag search (3× slower).
+CV_OCR_ROTATIONS = os.getenv("CV_OCR_ROTATIONS", "0").strip() or "0"
+# Candidate-key glyphs on classify; a few discrete glyphs on count-verify.
+VISION_DETECT_MAX_REFS = _int("VISION_DETECT_MAX_REFS", 4)
 # Max vision-detect box side as a fraction of the shorter image side; larger
 # boxes are shrunk around their center so they cannot suppress neighbours.
 VISION_DETECT_MAX_BOX_FRAC = _float("VISION_DETECT_MAX_BOX_FRAC", 0.15)
 CALLOUT_DROP_RADIUS_PX = _float("CALLOUT_DROP_RADIUS_PX", 80.0)
-FOLDER_VISION_429_RETRIES = _int("FOLDER_VISION_429_RETRIES", 1)
-FOLDER_VISION_429_BACKOFF_S = _float("FOLDER_VISION_429_BACKOFF_S", 4.0)
+GLYPH_IDENT_MIN = _float("GLYPH_IDENT_MIN", 0.55)
+GLYPH_IDENT_MARGIN = _float("GLYPH_IDENT_MARGIN", 0.08)
+FOLDER_VISION_429_RETRIES = _int("FOLDER_VISION_429_RETRIES", 0)
+FOLDER_VISION_429_BACKOFF_S = _float("FOLDER_VISION_429_BACKOFF_S", 0.0)
+# After a 429, skip remaining Gemini calls for this many seconds (CV keeps going).
+GEMINI_QUOTA_SKIP_S = _float("GEMINI_QUOTA_SKIP_S", 900.0)
+
+
+def ocr_rotations() -> tuple[int, ...]:
+    allowed = {0, 90, 180, 270}
+    out: list[int] = []
+    for part in CV_OCR_ROTATIONS.split(","):
+        part = part.strip()
+        if not part.isdigit():
+            continue
+        val = int(part)
+        if val in allowed and val not in out:
+            out.append(val)
+    return tuple(out) or (0,)
 
 
 def merge_eval_judge_sources() -> set[str]:
@@ -149,21 +176,15 @@ def merge_eval_judge_sources() -> set[str]:
 
 
 def llm_provider() -> str:
-    if LLM_PROVIDER in {"gemini", "groq"}:
-        return LLM_PROVIDER
-    return "groq"
+    return "gemini"
 
 
 def llm_model() -> str:
-    return GEMINI_MODEL if llm_provider() == "gemini" else GROQ_MODEL
+    return GEMINI_MODEL
 
 
 def llm_enabled() -> bool:
-    if not SYMBOL_COUNT_USE_LLM:
-        return False
-    if llm_provider() == "gemini":
-        return bool(GEMINI_API_KEY)
-    return bool(GROQ_API_KEY)
+    return bool(SYMBOL_COUNT_USE_LLM) and bool(GEMINI_API_KEY)
 
 
 def vision_ocr_enabled() -> bool:

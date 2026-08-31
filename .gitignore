@@ -23,7 +23,6 @@ symbol-count-vision/storage/_*/
 
 # Local-only folders (not on GitHub)
 hvac-cost-estimator/
-vision-extraction/
 synthetic_hvac_data/
 Architecture*.png
 *.docx

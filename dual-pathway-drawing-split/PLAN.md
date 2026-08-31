@@ -17,7 +17,7 @@ Process multiple construction PDFs. For each PDF:
 
 ```
 dual-pathway-drawing-split/
-  src/pipeline/     CV + vision pipeline (copied from vision-extraction)
+  src/pipeline/     CV + vision pipeline
   src/batch.py      multi-PDF batch runner
   scripts/          CLI entry points
   storage/jobs/     output (gitignored)

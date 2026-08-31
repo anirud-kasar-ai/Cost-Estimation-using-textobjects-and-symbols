@@ -73,9 +73,7 @@ PLAN_LEGEND_STOP_RE = re.compile(
 )
 PLAN_DESC_CONTINUATION_RE = re.compile(
     r"^(BOARD\s+CEILING|IN\s+EXISTING|REMOVED\s+WHERE|ACOUSTICAL\s+CEILING|"
-    r"REINSTALLED[, ]|AND\s+TYPE|MATERIAL\b|HATCH\b|"
-    r"BE\s+DEMOLISHED|WHERE\s+INDICATED|TO\s+BE\s+(REMOVED|DEMOLISHED)|"
-    r"GRILLE\s+TO\s+BE|GYPSUM\s+BOARD)",
+    r"REINSTALLED[, ]|AND\s+TYPE|MATERIAL\b|HATCH\b)",
     re.IGNORECASE,
 )
 PLAN_GLYPH_TEXT_RE = re.compile(
@@ -246,11 +244,14 @@ def extract_symbol_table_from_pdf(pdf_path: Path) -> SymbolTableInfo:
                 )
             )
 
-            # Architect cover: SYMBOLS (drafting / view). Abbreviations are
-            # not counted as symbols.
+            # Architect cover: SYMBOLS (drafting / view) + ABBREVIATIONS.
             if _page_has_symbols_section(text):
                 page_entries.extend(
                     _parse_symbols_section(spans, page_number, page=page)
+                )
+            if _page_has_abbreviations_section(text):
+                page_entries.extend(
+                    _parse_abbreviations_section(spans, page_number)
                 )
 
             # Architect plan/ceiling legends (glyph left of description).
@@ -269,7 +270,7 @@ def extract_symbol_table_from_pdf(pdf_path: Path) -> SymbolTableInfo:
     info.legend_pages = sorted(set(info.legend_pages))
     if not info.entries:
         info.notes.append(
-            "No symbol legend or drafting symbols table was found."
+            "No symbol legend, drafting symbols, or abbreviations table was found."
         )
     return info
 
@@ -281,6 +282,8 @@ def _page_has_legend(text: str) -> bool:
     if re.search(r"\bSYMBOL\s+LEGEND\b", upper):
         return True
     if _page_has_symbols_section(text):
+        return True
+    if _page_has_abbreviations_section(text):
         return True
     if _page_has_plan_legend(text):
         return True
@@ -523,12 +526,7 @@ def _parse_plan_legend_sections(
             median_x = xs[len(xs) // 2]
             desc_spans = [s for s in desc_spans if abs(s.x0 - median_x) < 80]
 
-        labeled = _merge_plan_legend_labels(
-            desc_spans,
-            page=page,
-            glyph_x0=heading.x0 - 8,
-            glyph_x1=desc_min_x - 2,
-        )
+        labeled = _merge_plan_legend_labels(desc_spans)
         start = len(entries)
         for label, anchor in labeled:
             entries.append(
@@ -545,8 +543,7 @@ def _parse_plan_legend_sections(
             glyph_width=140.0,
             x_gap=4.0,
             x_left_floor=heading.x0 - 8,
-            y_ceiling=heading.y1 + 2,
-            vertical_half_span=40.0,
+            vertical_half_span=28.0,
             isolate_bands=True,
         )
     return entries
@@ -569,34 +566,8 @@ def _is_plan_legend_noise(text: str) -> bool:
     return False
 
 
-def _glyph_strip_has_ink(
-    page: fitz.Page,
-    x0: float,
-    x1: float,
-    y0: float,
-    y1: float,
-) -> bool:
-    """True when the legend glyph strip at this row has dark CAD ink."""
-    left, right = (x0, x1) if x0 <= x1 else (x1, x0)
-    top, bottom = (y0, y1) if y0 <= y1 else (y1, y0)
-    clip = fitz.Rect(left, top, right, bottom) & page.rect
-    if clip.is_empty or clip.width < 3 or clip.height < 2:
-        return False
-    try:
-        pix = page.get_pixmap(
-            matrix=fitz.Matrix(2.0, 2.0), clip=clip, alpha=False
-        )
-    except Exception:  # noqa: BLE001
-        return True
-    return not _pixmap_mostly_blank(pix, min_dark_pixels=6)
-
-
 def _merge_plan_legend_labels(
     spans: list[_TextSpan],
-    *,
-    page: fitz.Page | None = None,
-    glyph_x0: float | None = None,
-    glyph_x1: float | None = None,
 ) -> list[tuple[str, _TextSpan]]:
     """Join wrapped description lines; keep separate meanings as separate rows."""
     if not spans:
@@ -616,30 +587,16 @@ def _merge_plan_legend_labels(
         current_parts = []
         anchor = None
 
-    def wrap_without_glyph(span: _TextSpan) -> bool:
-        if page is None or glyph_x0 is None or glyph_x1 is None:
-            return False
-        pad = 2.0
-        return not _glyph_strip_has_ink(
-            page,
-            glyph_x0,
-            glyph_x1,
-            span.y0 - pad,
-            span.y1 + pad,
-        )
-
     for span in ordered:
         text = span.text
         is_cont = bool(PLAN_DESC_CONTINUATION_RE.match(text))
-        close = last_y is not None and (span.y0 - last_y) < 22
+        close = last_y is not None and (span.y0 - last_y) < 18
         new_item = text.upper().startswith(
             ("(E)", "(N)", "NEW ", "EXISTING ", "ROOM ", "ROLLER ", "CEILING ")
         )
         if current_parts and is_cont and close and not new_item:
             current_parts.append(text)
         elif current_parts and close and text[:1].islower() and not new_item:
-            current_parts.append(text)
-        elif current_parts and close and not new_item and wrap_without_glyph(span):
             current_parts.append(text)
         else:
             flush()
@@ -809,127 +766,14 @@ def _attach_description_left_glyphs(
         if y_hi > y_lo:
             prefer = (desc_mid - y_lo) / (y_hi - y_lo)
             prefer = max(0.15, min(0.85, prefer))
-        bound_y0 = y_lo
-        bound_y1 = y_hi
-        if pos > 0:
-            prev = anchors[pos - 1][1]
-            bound_y0 = min(bound_y0, prev.y1 + 3.0)
-        else:
-            bound_y0 = min(bound_y0, rect.y0 - 56.0)
-        if pos + 1 < len(anchors):
-            nxt = anchors[pos + 1][1]
-            bound_y1 = max(bound_y1, nxt.y0 - 3.0)
-        else:
-            bound_y1 = max(bound_y1, rect.y1 + 56.0)
-        if y_ceiling is not None:
-            bound_y0 = max(bound_y0, y_ceiling)
-        bound_x0 = x_left_floor if x_left_floor is not None else x_left - 24.0
-        expand_bounds = fitz.Rect(bound_x0, bound_y0, x_right, bound_y1) & page.rect
         png = _pixmap_to_symbol_png(
             page,
             clip,
             isolate_bands=isolate_bands,
             prefer_y_frac=prefer,
-            expand_bounds=expand_bounds,
         )
         if png:
             entries[index].symbol_image_png = png
-
-
-def _image_edge_ink(
-    img: PILImage.Image,
-    *,
-    edge_px: int = 3,
-    thresh: int = 245,
-) -> tuple[bool, bool, bool, bool]:
-    """True when dark ink touches left, top, right, bottom crop borders."""
-    gray = img.convert("L")
-    pixels = gray.load()
-    width, height = img.size
-    if width < 2 or height < 2:
-        return False, False, False, False
-    edge = max(1, min(edge_px, width // 4, height // 4))
-
-    def _dark(x: int, y: int) -> bool:
-        return pixels[x, y] < thresh
-
-    def _col_frac(x: int) -> float:
-        return sum(1 for y in range(height) if _dark(x, y)) / height
-
-    def _row_frac(y: int) -> float:
-        return sum(1 for x in range(width) if _dark(x, y)) / width
-
-    # Full-span table rules sit on cell borders; they are not clipped glyph ink.
-    left = any(_dark(x, y) for x in range(edge) for y in range(height))
-    if max(_col_frac(x) for x in range(edge)) >= 0.72:
-        left = False
-    right = any(_dark(x, y) for x in range(width - edge, width) for y in range(height))
-    if max(_col_frac(x) for x in range(width - edge, width)) >= 0.72:
-        right = False
-    top = any(_dark(x, y) for y in range(edge) for x in range(width))
-    if max(_row_frac(y) for y in range(edge)) >= 0.72:
-        top = False
-    bottom = any(
-        _dark(x, y) for y in range(height - edge, height) for x in range(width)
-    )
-    if max(_row_frac(y) for y in range(height - edge, height)) >= 0.72:
-        bottom = False
-    return left, top, right, bottom
-
-
-def _expand_clip_for_edge_ink(
-    page: fitz.Page,
-    clip: fitz.Rect,
-    *,
-    bounds: fitz.Rect | None = None,
-    matrix_scale: float = 4.0,
-    max_expand_pt: float = 32.0,
-    step_pt: float = 8.0,
-) -> fitz.Rect:
-    """Grow clip while ink is cut by a border, staying inside bounds."""
-    expanded = fitz.Rect(clip)
-    limit = (bounds & page.rect) if bounds is not None else page.rect
-    if limit.is_empty:
-        return expanded
-    grown = 0.0
-    while grown < max_expand_pt:
-        try:
-            pix = page.get_pixmap(
-                matrix=fitz.Matrix(matrix_scale, matrix_scale),
-                clip=expanded,
-                alpha=False,
-            )
-        except Exception:  # noqa: BLE001
-            break
-        if pix.width < 4 or pix.height < 4:
-            break
-        try:
-            img = PILImage.open(io.BytesIO(pix.tobytes("png"))).convert("L")
-        except Exception:  # noqa: BLE001
-            break
-        left, top, right, bottom = _image_edge_ink(img)
-        if not (left or top or right or bottom):
-            break
-        next_clip = fitz.Rect(expanded)
-        if left:
-            next_clip.x0 -= step_pt
-        if right:
-            next_clip.x1 += step_pt
-        if top:
-            next_clip.y0 -= step_pt
-        if bottom:
-            next_clip.y1 += step_pt
-        next_clip = next_clip & limit
-        if (
-            abs(next_clip.x0 - expanded.x0) < 0.4
-            and abs(next_clip.y0 - expanded.y0) < 0.4
-            and abs(next_clip.x1 - expanded.x1) < 0.4
-            and abs(next_clip.y1 - expanded.y1) < 0.4
-        ):
-            break
-        expanded = next_clip
-        grown += step_pt
-    return expanded
 
 
 def _pixmap_to_symbol_png(
@@ -938,12 +782,7 @@ def _pixmap_to_symbol_png(
     *,
     isolate_bands: bool,
     prefer_y_frac: float,
-    expand_bounds: fitz.Rect | None = None,
 ) -> bytes | None:
-    if expand_bounds is not None:
-        clip = _expand_clip_for_edge_ink(
-            page, clip, bounds=expand_bounds, matrix_scale=4.0
-        )
     try:
         pix = page.get_pixmap(
             matrix=fitz.Matrix(4.0, 4.0), clip=clip, alpha=False
@@ -1060,13 +899,12 @@ def _isolate_primary_ink_band(
                 top = b0
                 primary_h = bot - top + 1
                 changed = True
-            # Continuation immediately below (e.g. lower half of a ceiling-height
-            # pennant). Keep the gap small so the next legend row stays out.
+            # Rare short continuation below (keep tight — neighbors live here).
             elif (
                 b0 > bot
-                and (b0 - bot) <= 40
-                and band_h <= 70
-                and band_h <= max(70, primary_h * 0.85)
+                and (b0 - bot) <= 16
+                and band_h <= 32
+                and band_h <= primary_h * 0.4
             ):
                 bot = b1
                 primary_h = bot - top + 1
@@ -1612,29 +1450,6 @@ def _crop_tech_symbol_cell(
     visual = visual & page.rect
     if visual.is_empty or visual.width < 4 or visual.height < 4:
         return None
-    # Expand along the symbol *column* (glyph width) but almost not along the
-    # row axis — that direction is neighboring legend rows on rotated sheets.
-    slack_row = 3.0
-    slack_col = 16.0
-    bound_text = fitz.Rect(
-        min(row_x_left, row_x_right) - slack_row,
-        sym_lo - slack_col,
-        max(row_x_left, row_x_right) + slack_row,
-        sym_hi + slack_col,
-    )
-    bound_visual = _text_to_visual_rect(page, bound_text)
-    bound_visual = fitz.Rect(
-        min(bound_visual.x0, bound_visual.x1),
-        min(bound_visual.y0, bound_visual.y1),
-        max(bound_visual.x0, bound_visual.x1),
-        max(bound_visual.y0, bound_visual.y1),
-    )
-    if desc_visual_left is not None and desc_visual_left > bound_visual.x0 + 8:
-        bound_visual.x1 = min(bound_visual.x1, desc_visual_left - 2)
-    bound_visual = bound_visual & page.rect
-    visual = _expand_clip_for_edge_ink(
-        page, visual, bounds=bound_visual, matrix_scale=3.5
-    )
     try:
         pix = page.get_pixmap(
             matrix=fitz.Matrix(3.5, 3.5), clip=visual, alpha=False
@@ -1643,7 +1458,7 @@ def _crop_tech_symbol_cell(
         return None
     if pix.width < 4 or pix.height < 4 or _pixmap_mostly_blank(pix):
         return None
-    return _trim_pixmap_png(pix, strip_grid=False, erase_separated_rules=True)
+    return _trim_pixmap_png(pix)
 
 
 def _trim_pixmap_png(
@@ -1837,24 +1652,12 @@ def _crop_grouped_symbol(
     xs = [e.row_x for e in group if e.row_x is not None]
     if not xs:
         return None
-    desc_left: float | None = None
-    for entry in group:
-        needle = (entry.description or "").split(",")[0].strip()
-        if len(needle) < 4:
-            needle = (entry.description or "")[:40]
-        if not needle:
-            continue
-        for hit in page.search_for(needle[:48]):
-            visual = _text_to_visual_rect(page, hit)
-            left = min(visual.x0, visual.x1)
-            desc_left = left if desc_left is None else min(desc_left, left)
     return _crop_tech_symbol_cell(
         page,
         row_x_left=min(xs) - 10,
         row_x_right=max(xs) + 10,
         bands=bands,
         visual_cols=visual_cols or {},
-        desc_visual_left=desc_left,
     )
 
 

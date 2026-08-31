@@ -2,12 +2,12 @@
 
 Standalone FastAPI app that counts **technology-legend symbols** on CAD plan tiles.
 
-Pipeline: detect (OCR + template glyphs + CV + optional Gemini/Groq vision) → map → NMS → evaluate → count. Prefer **per-tile / folder zoom** workflows — do not stitch the full wing first.
+Pipeline: CV candidate proposal → taxonomy ContextRule resolve → vision classify (ambiguous crops only, label not box) → ROI merge → count. Prefer **per-tile / folder zoom** workflows — do not stitch the full wing first.
 
 ## Docs
 
 - **[SETUP.md](SETUP.md)** — install, `.env`, run UI
-- Companion zoom exporter: [`../drawing-zoom-split`](../drawing-zoom-split)
+- Companion zoom exporter: [`../dual-pathway-drawing-split`](../dual-pathway-drawing-split)
 
 ## Quick start
 
@@ -17,7 +17,7 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
-# Edit .env — set GEMINI_API_KEY or GROQ_API_KEY (never commit .env)
+# Edit .env — set GEMINI_API_KEY (never commit .env)
 uvicorn app:app --reload --reload-dir pipeline --reload-dir static --host 127.0.0.1 --port 8767
 ```
 
@@ -29,7 +29,7 @@ Open http://127.0.0.1:8767
 |-------|-------------|
 | Symbol file | Technical-symbol PDF (preferred) or `symbol_table.json` |
 | Plan image | Single zoom tile (`.jpg` / `.png` / `.webp`) |
-| Zoom folder | All `plan_zoom_*.jpg` + `full_wing.jpg` + `zooms_manifest.json` from dual-pathway |
+| Zoom folder | All `plan_zoom_*.jpg` + `full_wing.jpg` + `zooms_manifest.json` from dual-pathway-drawing-split |
 
 Outputs per job under `storage/jobs/<job_id>/`: `result.json`, `overlay.png`, extracted `07_glyphs/`.
 

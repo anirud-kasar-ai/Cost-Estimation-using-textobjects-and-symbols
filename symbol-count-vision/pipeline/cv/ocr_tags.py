@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import shutil
+import threading
 from typing import Any
 
 import numpy as np
@@ -41,6 +42,48 @@ def preprocess_for_ocr(image: Image.Image, *, upscale: bool = True) -> np.ndarra
     if float(np.mean(binary)) < 127.0:
         binary = cv2.bitwise_not(binary)
     return binary
+
+
+_ocr_pass_lock = threading.Lock()
+_ocr_pass_cache: dict[tuple[int, tuple[int, ...]], list[tuple[int, dict[str, Any]]]] = {}
+
+
+def clear_ocr_page_cache(image: Image.Image | None = None) -> None:
+    with _ocr_pass_lock:
+        if image is None:
+            _ocr_pass_cache.clear()
+            return
+        drop = [key for key in _ocr_pass_cache if key[0] == id(image)]
+        for key in drop:
+            _ocr_pass_cache.pop(key, None)
+
+
+def ocr_page_passes(image: Image.Image) -> list[tuple[int, dict[str, Any]]]:
+    """Run Tesseract once per configured rotation; reuse within a tile."""
+    if not tesseract_available():
+        return []
+    import pytesseract
+
+    rotations = config.ocr_rotations()
+    cache_key = (id(image), rotations)
+    with _ocr_pass_lock:
+        cached = _ocr_pass_cache.get(cache_key)
+        if cached is not None:
+            return cached
+    _configure_tesseract()
+    passes: list[tuple[int, dict[str, Any]]] = []
+    for rot in rotations:
+        view = image if rot == 0 else image.rotate(rot, expand=True)
+        preprocessed = preprocess_for_ocr(view, upscale=True)
+        data = pytesseract.image_to_data(
+            preprocessed,
+            output_type=pytesseract.Output.DICT,
+            config="--psm 11",
+        )
+        passes.append((rot, data))
+    with _ocr_pass_lock:
+        _ocr_pass_cache[cache_key] = passes
+    return passes
 
 
 def _unrotate_box(
@@ -90,6 +133,145 @@ _TITLE_BOILERPLATE_RE = re.compile(
     r"(A-?WING|\bWING\b|KEY\s*PLAN|\bEAST\b|\bWEST\b|\bNORTH\b|\bSOUTH\b)",
     re.IGNORECASE,
 )
+_KEY_TOKEN_RE = re.compile(r"^KEY$", re.IGNORECASE)
+_PLAN_TOKEN_RE = re.compile(r"^PLAN$", re.IGNORECASE)
+_KEYPLAN_TOKEN_RE = re.compile(r"^KEYPLAN$", re.IGNORECASE)
+
+
+def keyplan_regions_from_words(
+    words: list[tuple[str, float, float, float, float]],
+    *,
+    pad_x: float = 48.0,
+    pad_y: float = 36.0,
+    plan_extra_left: float = 260.0,
+    plan_extra_top: float = 220.0,
+) -> list[BoundingBox]:
+    """Build exclusion boxes from OCR tokens that spell KEY PLAN.
+
+    The mini-plan drawing usually sits left/above the label, so the box is
+    extended that way. ``words`` are ``(text, x1, y1, x2, y2)``.
+    """
+    if not words:
+        return []
+    used: set[int] = set()
+    regions: list[BoundingBox] = []
+
+    def _expand(x1: float, y1: float, x2: float, y2: float) -> BoundingBox:
+        return BoundingBox(
+            x1=x1 - pad_x - plan_extra_left,
+            y1=y1 - pad_y - plan_extra_top,
+            x2=x2 + pad_x,
+            y2=y2 + pad_y,
+        )
+
+    for i, (text, x1, y1, x2, y2) in enumerate(words):
+        if i in used:
+            continue
+        tok = (text or "").strip()
+        if _KEYPLAN_TOKEN_RE.match(tok.replace(" ", "")):
+            used.add(i)
+            regions.append(_expand(x1, y1, x2, y2))
+            continue
+        if not _KEY_TOKEN_RE.match(tok):
+            continue
+        cx = (x1 + x2) / 2.0
+        cy = (y1 + y2) / 2.0
+        partner: tuple[float, float, float, float] | None = None
+        for j, (other, ox1, oy1, ox2, oy2) in enumerate(words):
+            if j == i or j in used:
+                continue
+            if not _PLAN_TOKEN_RE.match((other or "").strip()):
+                continue
+            ocx = (ox1 + ox2) / 2.0
+            ocy = (oy1 + oy2) / 2.0
+            if abs(ocy - cy) <= 40.0 and abs(ocx - cx) <= 180.0:
+                partner = (ox1, oy1, ox2, oy2)
+                used.add(j)
+                break
+        used.add(i)
+        if partner is None:
+            regions.append(_expand(x1, y1, x2, y2))
+        else:
+            px1, py1, px2, py2 = partner
+            regions.append(
+                _expand(min(x1, px1), min(y1, py1), max(x2, px2), max(y2, py2))
+            )
+    return regions
+
+
+_TITLE_TOKEN_RE = re.compile(r"^(A-?WING|WING|EAST|WEST|NORTH|SOUTH)$", re.IGNORECASE)
+
+
+def title_regions_from_words(
+    words: list[tuple[str, float, float, float, float]],
+    *,
+    pad_x: float = 40.0,
+    pad_y: float = 24.0,
+    extra_bottom: float = 90.0,
+) -> list[BoundingBox]:
+    """Exclusion box around sheet titles like ``A-WING (EAST)``."""
+    hits = [
+        (x1, y1, x2, y2)
+        for text, x1, y1, x2, y2 in words
+        if _TITLE_TOKEN_RE.match((text or "").strip().replace("(", "").replace(")", ""))
+    ]
+    if not hits:
+        return []
+    x1 = min(h[0] for h in hits) - pad_x
+    y1 = min(h[1] for h in hits) - pad_y
+    x2 = max(h[2] for h in hits) + pad_x
+    y2 = max(h[3] for h in hits) + pad_y + extra_bottom
+    return [BoundingBox(x1, y1, x2, y2)]
+
+
+def _ocr_words_in_band(
+    image: Image.Image, y0: int, y1: int
+) -> list[tuple[str, float, float, float, float]]:
+    try:
+        import pytesseract
+    except ImportError:
+        return []
+    w, h = image.size
+    y0 = max(0, min(h, y0))
+    y1 = max(y0 + 1, min(h, y1))
+    crop = image.crop((0, y0, w, y1))
+    try:
+        data = pytesseract.image_to_data(crop, output_type=pytesseract.Output.DICT)
+    except Exception:  # noqa: BLE001
+        return []
+    words: list[tuple[str, float, float, float, float]] = []
+    n = len(data.get("text") or [])
+    for i in range(n):
+        tok = str(data["text"][i] or "").strip()
+        if not tok:
+            continue
+        try:
+            conf = float(data["conf"][i])
+        except (TypeError, ValueError):
+            conf = -1.0
+        if conf >= 0 and conf < 40:
+            continue
+        left = float(data["left"][i])
+        top = float(data["top"][i])
+        width = float(data["width"][i])
+        height = float(data["height"][i])
+        words.append((tok, left, top + y0, left + width, top + y0 + height))
+    return words
+
+
+def find_keyplan_regions(image: Image.Image) -> list[BoundingBox]:
+    """OCR title + KEY PLAN bands; return exclusion boxes for those insets."""
+    if not tesseract_available():
+        return []
+    _configure_tesseract()
+    w, h = image.size
+    if w < 20 or h < 20:
+        return []
+    regions = title_regions_from_words(_ocr_words_in_band(image, 0, int(h * 0.32)))
+    regions.extend(
+        keyplan_regions_from_words(_ocr_words_in_band(image, int(h * 0.62), h))
+    )
+    return regions
 
 
 def _is_title_or_keyplan_ocr_span(
@@ -249,7 +431,6 @@ def collect_pipe_callout_ocr_hints(
     """Collect ``1|n`` style spans from full-image OCR (hints for # reinforcement)."""
     if not tesseract_available():
         return []
-    import pytesseract
 
     from pipeline.cv.callout_boxes import (
         normalize_callout_text,
@@ -264,14 +445,7 @@ def collect_pipe_callout_ocr_hints(
     y_min = orig_h * exclude_top_pct
     scale = 2.0
     hints: list[dict[str, Any]] = []
-    for rot in (0, 90, 270):
-        view = image if rot == 0 else image.rotate(rot, expand=True)
-        preprocessed = preprocess_for_ocr(view, upscale=True)
-        data = pytesseract.image_to_data(
-            preprocessed,
-            output_type=pytesseract.Output.DICT,
-            config="--psm 11",
-        )
+    for rot, data in ocr_page_passes(image):
         n = len(data.get("text") or [])
         for i in range(n):
             text = str(data["text"][i] or "").strip()
@@ -334,6 +508,60 @@ def collect_pipe_callout_ocr_hints(
                 }
             )
     return hints
+
+
+def collect_qty_digit_hints(
+    image: Image.Image,
+    *,
+    exclude_top_pct: float | None = None,
+) -> list[dict[str, Any]]:
+    """Single digits 2–9 from the cached page OCR (QTY beside a '#' drop)."""
+    if not tesseract_available():
+        return []
+    exclude_top_pct = float(
+        exclude_top_pct if exclude_top_pct is not None else config.CV_TITLE_BAND_PCT
+    )
+    orig_w, orig_h = image.size
+    y_min = orig_h * exclude_top_pct
+    scale = 2.0
+    out: list[dict[str, Any]] = []
+    for rot, data in ocr_page_passes(image):
+        n = len(data.get("text") or [])
+        for i in range(n):
+            text = str(data["text"][i] or "").strip()
+            if not re.fullmatch(r"[2-9]", text):
+                continue
+            prev = str(data["text"][i - 1] or "").strip() if i else ""
+            nxt = str(data["text"][i + 1] or "").strip() if i + 1 < n else ""
+            if prev.isdigit() or nxt.isdigit() or prev in {"|", "I", "l"} or nxt in {"|"}:
+                continue
+            try:
+                conf = float(data["conf"][i])
+            except (TypeError, ValueError):
+                conf = 0.0
+            if conf >= 0 and conf < 25:
+                continue
+            x = float(data["left"][i]) / scale
+            y = float(data["top"][i]) / scale
+            w = float(data["width"][i]) / scale
+            h = float(data["height"][i]) / scale
+            if h < 6 or h > 28 or w > 22:
+                continue
+            x1, y1, x2, y2 = _unrotate_box(
+                rot, x, y, x + w, y + h, orig_w=float(orig_w), orig_h=float(orig_h)
+            )
+            xa, xb = sorted((x1, x2))
+            ya, yb = sorted((y1, y2))
+            if ya < y_min:
+                continue
+            out.append(
+                {
+                    "qty": int(text),
+                    "cx": (xa + xb) / 2.0,
+                    "cy": (ya + yb) / 2.0,
+                }
+            )
+    return out
 
 
 def _ocr_part_labels_near_centers(

@@ -66,7 +66,7 @@ def test_callout_near_triangle_does_not_double_count():
     assert drops[0].qty == 2
 
 
-def test_callout_without_triangle_seeds_one_hash():
+def test_callout_without_triangle_does_not_seed_hash():
     img = Image.new("RGB", (200, 200), color=(255, 255, 255))
     hints = [{"cx": 50.0, "cy": 60.0, "qty": 1, "text": "1|13"}]
     out = reinforce_hash_from_callouts(
@@ -77,6 +77,4 @@ def test_callout_without_triangle_seeds_one_hash():
         radius_px=80.0,
     )
     drops = [d for d in out if d.source == "callout_drop"]
-    assert len(drops) == 1
-    assert drops[0].symbol == "#"
-    assert drops[0].qty == 1
+    assert drops == []

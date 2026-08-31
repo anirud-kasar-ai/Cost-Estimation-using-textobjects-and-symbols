@@ -1,4 +1,4 @@
-"""POC acceptance test for dual-pathway-drawing-split (1948BIDDrawings).
+"""POC acceptance test for drawing-zoom-split (1948BIDDrawings).
 
 Runs automated QA across pipeline stages — no manual checks required.
 Exit 0 = POC PASS, 1 = POC FAIL.
@@ -206,123 +206,20 @@ def run_acceptance(job_id: str = JOB_ID) -> Report:
         f"{wings_with_roi} wings with ROI",
     )
 
-    # --- Stage 4: symbol count (wing image method) ---
+    # --- Stage 4: zoom tiles ---
+    zoom_manifests = list((job_root / "04_wings").rglob("zooms_manifest.json"))
     report.ok(
-        "4-symbol-count",
-        "symbol_count_status done",
-        job.get("symbol_count_status") == "done",
-        str(job.get("symbol_count_status")),
+        "4-zooms",
+        "Zoom manifests present",
+        len(zoom_manifests) >= 10,
+        f"{len(zoom_manifests)} manifests",
     )
-    detail_path = job_root / str(
-        job.get("symbol_count_detail_path") or "06_symbol_counts/symbol_count_detail.json"
-    )
-    detail = _load_json(detail_path)
-    report.ok("4-symbol-count", "symbol_count_detail.json", isinstance(detail, dict))
-    method = detail.get("method") if isinstance(detail, dict) else None
+    plan_tiles = list((job_root / "04_wings").rglob("plan_zoom_*.jpg"))
     report.ok(
-        "4-symbol-count",
-        "Method is wing_zoom_tiles_vision_by_wing_name",
-        method == "wing_zoom_tiles_vision_by_wing_name",
-        str(method),
-    )
-    instances = detail.get("instance_results") if isinstance(detail, dict) else []
-    per_sheet = detail.get("per_sheet_results") if isinstance(detail, dict) else []
-    report.ok(
-        "4-symbol-count",
-        "Floor-plan wing columns (by name)",
-        isinstance(instances, list) and len(instances) >= 10,
-        f"{len(instances) if isinstance(instances, list) else 0} wings",
-    )
-    report.ok(
-        "4-symbol-count",
-        "Per-sheet wing images processed",
-        isinstance(per_sheet, list) and len(per_sheet) >= 25,
-        f"{len(per_sheet) if isinstance(per_sheet, list) else 0} sheet wings",
-    )
-
-    missing_wing_imgs: list[str] = []
-    empty_counts = 0
-    page_suffix_cols = []
-    if isinstance(instances, list):
-        for inst in instances:
-            col = str(inst.get("column_key") or "")
-            if "page_" in col.lower() or col.startswith("T-"):
-                page_suffix_cols.append(col)
-            if not (inst.get("counts") or {}):
-                empty_counts += 1
-    if isinstance(per_sheet, list):
-        for inst in per_sheet:
-            rel = str(inst.get("wing_image") or "")
-            if not rel or not (job_root / rel).is_file():
-                missing_wing_imgs.append(f"{inst.get('wing_name')}/{rel}")
-    report.ok(
-        "4-symbol-count",
-        "Columns are wing names only (no page suffix)",
-        not page_suffix_cols,
-        str(page_suffix_cols[:5]) if page_suffix_cols else "all ok",
-    )
-    report.ok(
-        "4-symbol-count",
-        "Every sheet wing image exists on disk",
-        not missing_wing_imgs,
-        f"missing: {missing_wing_imgs[:5]}" if missing_wing_imgs else "all ok",
-    )
-    report.ok(
-        "4-symbol-count",
-        "Majority of wings have detections",
-        isinstance(instances, list)
-        and empty_counts < len(instances) * 0.4,
-        f"{empty_counts} empty of {len(instances) if isinstance(instances, list) else 0}",
-    )
-
-    csv_rel = job.get("symbol_count_report_csv")
-    pdf_rel = job.get("symbol_count_report_pdf")
-    json_rel = job.get("symbol_count_report_json")
-    report.ok(
-        "4-symbol-count",
-        "CSV report exists",
-        bool(csv_rel) and (job_root / str(csv_rel)).is_file(),
-    )
-    report.ok(
-        "4-symbol-count",
-        "PDF report exists",
-        bool(pdf_rel) and (job_root / str(pdf_rel)).is_file(),
-    )
-    report.ok(
-        "4-symbol-count",
-        "JSON report exists",
-        bool(json_rel) and (job_root / str(json_rel)).is_file(),
-    )
-
-    def _counts_for(wing_name: str) -> dict[str, int]:
-        if not isinstance(instances, list):
-            return {}
-        for inst in instances:
-            if inst.get("column_key") == wing_name:
-                return dict(inst.get("counts") or {})
-        return {}
-
-    a_east = _counts_for("A-WING-EAST")
-    a_west = _counts_for("A-WING-WEST")
-    report.ok(
-        "4-symbol-count",
-        "A-WING-EAST aggregated has AP/J/R tags",
-        a_east.get("AP", 0) >= 1
-        and a_east.get("J", 0) >= 1
-        and a_east.get("R", 0) >= 1,
-        str(a_east),
-    )
-    report.ok(
-        "4-symbol-count",
-        "A-WING-EAST aggregated has # on wing images",
-        a_east.get("#", 0) >= 1,
-        str(a_east.get("#", 0)),
-    )
-    report.ok(
-        "4-symbol-count",
-        "A-WING-WEST aggregated has AP tags",
-        a_west.get("AP", 0) >= 1,
-        str(a_west),
+        "4-zooms",
+        "Plan zoom tiles present",
+        len(plan_tiles) >= 20,
+        f"{len(plan_tiles)} tiles",
     )
 
     # --- Stage 5: API ---
@@ -340,84 +237,12 @@ def run_acceptance(job_id: str = JOB_ID) -> Report:
         "GET /api/jobs/{id}",
         job_resp.status_code == 200 and job_resp.json().get("status") == "done",
     )
-    sym_json = client.get(f"/api/jobs/{job_id}/symbol-count.json")
-    report.ok("5-api", "GET symbol-count.json", sym_json.status_code == 200)
-    if sym_json.status_code == 200:
-        payload = sym_json.json()
-        cols = payload.get("columns") or []
-        rows = payload.get("rows") or []
-        report.ok(
-            "5-api",
-            "Report JSON columns are wing names",
-            len(cols) >= 10 and all("page_" not in c.lower() for c in cols),
-            f"{len(cols)} columns: {cols[:4]}…",
-        )
-        report.ok(
-            "5-api",
-            "Report JSON has symbol rows",
-            len(rows) >= entry_count,
-            f"{len(rows)} rows",
-        )
-        nonzero = sum(1 for r in rows if int(r.get("total") or 0) > 0)
-        report.ok(
-            "5-api",
-            "Report has non-zero symbol totals",
-            nonzero >= 5,
-            f"{nonzero} symbols with counts",
-        )
-    sym_csv = client.get(f"/api/jobs/{job_id}/symbol-count.csv")
-    report.ok(
-        "5-api",
-        "GET symbol-count.csv",
-        sym_csv.status_code == 200 and b"Symbol" in sym_csv.content,
-    )
-    sym_pdf = client.get(f"/api/jobs/{job_id}/symbol-count.pdf")
-    report.ok(
-        "5-api",
-        "GET symbol-count.pdf",
-        sym_pdf.status_code == 200 and sym_pdf.content[:4] == b"%PDF",
-    )
     if sym_files:
         tech = client.get(f"/api/jobs/{job_id}/technical-symbol.pdf")
         report.ok(
             "5-api",
             "GET technical-symbol.pdf",
             tech.status_code == 200 and tech.content[:4] == b"%PDF",
-        )
-
-    # --- Stage 6: re-run symbol count (idempotent) ---
-    from pipeline.llama_vision import get_llama_client  # noqa: E402
-    from pipeline.symbol_count import run_symbol_count  # noqa: E402
-
-    llm = get_llama_client()
-    if llm.ready:
-        rerun = run_symbol_count(job_root)
-        report.ok(
-            "6-rerun",
-            "Symbol count re-run succeeds",
-            rerun.get("status") == "done",
-            str(rerun.get("status")),
-        )
-        report.ok(
-            "6-rerun",
-            "Re-run wing column count stable",
-            int(rerun.get("instances") or 0) == len(instances)
-            if isinstance(instances, list)
-            else int(rerun.get("instances") or 0) >= 10,
-            str(rerun.get("instances")),
-        )
-    else:
-        report.ok(
-            "6-rerun",
-            "Symbol count re-run succeeds",
-            True,
-            "skipped: vision LLM unavailable",
-        )
-        report.ok(
-            "6-rerun",
-            "Re-run wing column count stable",
-            True,
-            "skipped: vision LLM unavailable",
         )
 
     return report

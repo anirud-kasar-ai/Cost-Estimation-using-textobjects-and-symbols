@@ -12,6 +12,7 @@ storage/jobs/{pdf_stem}/
   03_drawings/page_004_diagram.jpg   cropped diagram
   04_wings/
     B-WING-EAST/page_004.jpg         one image per wing
+    B-WING-EAST/zooms/page_004/      588px tiles + full_wing + zooms_manifest.json
     C-WING-EAST/page_004.jpg
   05_metadata/page_004.json          wing map + boxes
   summary.json                       flat index

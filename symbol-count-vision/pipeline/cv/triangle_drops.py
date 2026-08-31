@@ -1,15 +1,13 @@
-"""Detect solid triangle data-drop marks and boxed hourglass cameras.
+"""Detect solid triangle data-drop marks, DATA POLE squares, and cameras.
 
-On these drawings a NETWORK CAMERA glyph is two solid triangles pointing at
-a small X-box between them, often with quantity digits outside:
+On these drawings:
 
-    4  ▶▶ [X] ◀◀  4
+- ``#`` is a filled triangle pointing at a wall (qty digit beside it).
+- DATA POLE is a square with an X (bowtie). Jack triangles beside it stay ``#``.
+- NETWORK CAMERA is a camcorder / small hourglass X-box, not the pole square.
 
-Those outer digits sit next to *smaller* flanking drop triangles (or on the
-outer tips). Morphological opening helps separate touching shapes but can
-erase the tiny outer drops on zoomed tiles, so candidates are collected from
-both the raw and opened binaries. Camera pairing is scale-independent
-(relative size + opposing tips + small gap).
+    4  ▶  [pole X]  ◀  4   →  one pole + two # drops (qty 4)
+    ▶ [small x-box] ◀     →  one camera (no pole-sized square)
 """
 
 from __future__ import annotations
@@ -32,6 +30,29 @@ TRIANGLE_SKIP_RADIUS = 90.0
 TRIANGLE_SKIP_RADIUS_DENSE = 36.0  # wall drops sit near false circles on 653 tiles
 TRIANGLE_DEDUPE_RADIUS = 22.0
 DENSE_ZOOM_MAX_EDGE = 800  # treat image as dense zoom when max(w,h) <= this
+
+
+def triangle_is_noise(
+    cand: dict[str, float],
+    *,
+    dense_zoom: bool = False,
+    near_callout: bool = False,
+) -> bool:
+    """True for arrowheads, ticks, and other slivers that are not drop marks."""
+    tiny_floor = 90 if dense_zoom else 160
+    if near_callout:
+        tiny_floor = 40 if dense_zoom else 80
+    width = float(cand.get("w") or 0)
+    height = float(cand.get("h") or 0)
+    area = float(cand.get("area") or 0)
+    min_side = 10.0 if near_callout else 12.0
+    if min(width, height) < min_side:
+        return True
+    if width * height < (140 if near_callout else 180) and min(width, height) < 14:
+        return True
+    if area < tiny_floor and abs(float(cand.get("dy") or 0)) > 0.75:
+        return True
+    return False
 
 
 
@@ -138,13 +159,38 @@ def _merge_candidates(groups: list[list[dict[str, float]]]) -> list[dict[str, fl
     return merged
 
 
+def _blocker_between_triangles(
+    left: dict[str, float],
+    right: dict[str, float],
+    blockers: list[dict[str, Any]] | None,
+) -> bool:
+    """True when a DATA POLE square sits in the gap (two # drops, not a camera)."""
+    if not blockers:
+        return False
+    gap_x1 = left["x"] + left["w"]
+    gap_x2 = right["x"]
+    mid_y = (left["cy"] + right["cy"]) / 2.0
+    y_tol = max(left["h"], right["h"]) * 0.9
+    for block in blockers:
+        if abs(float(block["cy"]) - mid_y) > y_tol:
+            continue
+        cx = float(block["cx"])
+        if gap_x1 - 4.0 <= cx <= gap_x2 + 4.0:
+            return True
+        if float(block["x1"]) < gap_x2 and float(block["x2"]) > gap_x1:
+            return True
+    return False
+
+
 def _pair_hourglass_cameras(
     candidates: list[dict[str, float]],
+    *,
+    blockers: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], set[int]]:
     """Pair opposing tip-to-tip triangles into NETWORK CAMERA glyphs.
 
-    Works at any zoom: similar area, aligned vertically, tips facing each
-    other across a small gap (possibly with an X-box between them).
+    A small X-box may sit in the gap. A DATA POLE square between two wall
+    drops is not a camera — those triangles stay ``#``.
     """
     cameras: list[dict[str, Any]] = []
     used: set[int] = set()
@@ -171,6 +217,8 @@ def _pair_hourglass_cameras(
             gap = right["x"] - (left["x"] + left["w"])
             max_gap = max(18.0, 0.9 * max(left["w"], right["w"]))
             if gap > max_gap or gap < -max(left["w"], right["w"]) * 0.4:
+                continue
+            if _blocker_between_triangles(left, right, blockers):
                 continue
             # Tips should point toward each other (opposing horizontal dirs).
             # left.dx > 0 (points right), right.dx < 0 (points left).
@@ -643,8 +691,16 @@ def detect_drop_marks(
             _triangle_candidates(opened, dense_zoom=dense_zoom),
         ]
     )
-    pair_cams, used = _pair_hourglass_cameras(candidates)
-    xbox_cams = _detect_xbox_cameras(binary) + _detect_xbox_cameras(opened)
+    pole_boxes = _detect_bowtie_poles(binary) + _detect_bowtie_poles(opened)
+    pair_cams, used = _pair_hourglass_cameras(candidates, blockers=pole_boxes)
+    xbox_cams = [
+        cam
+        for cam in (_detect_xbox_cameras(binary) + _detect_xbox_cameras(opened))
+        if not any(
+            abs(cam["cx"] - pole["cx"]) < 28 and abs(cam["cy"] - pole["cy"]) < 28
+            for pole in pole_boxes
+        )
+    ]
     cameras = _merge_cameras([pair_cams, xbox_cams])
     glyph_circles = _detect_glyph_circles(binary) + _detect_glyph_circles(opened)
     # Dedupe circle observations.
@@ -656,7 +712,6 @@ def detect_drop_marks(
             continue
         merged_circles.append((cx, cy, radius))
     glyph_circles = merged_circles
-    pole_boxes = _detect_bowtie_poles(binary) + _detect_bowtie_poles(opened)
     camera_bodies = _detect_camera_body_rects(binary) + _detect_camera_body_rects(opened)
 
     # Expand camera boxes that came from X-box alone so neighbouring tip
@@ -698,10 +753,7 @@ def detect_drop_marks(
         near_callout = any(
             (cx - px) ** 2 + (cy - py) ** 2 <= protect_r2 for px, py in protect
         )
-        tiny_floor = 90 if dense_zoom else 160
-        if near_callout:
-            tiny_floor = 40 if dense_zoom else 80
-        if cand["area"] < tiny_floor and abs(cand["dy"]) > 0.75:
+        if triangle_is_noise(cand, dense_zoom=dense_zoom, near_callout=near_callout):
             continue
         if any(
             cam["x1"] <= cx <= cam["x2"] and cam["y1"] <= cy <= cam["y2"]
@@ -900,7 +952,7 @@ def find_triangle_tip_near(
     best: dict[str, float] | None = None
     best_dist = radius + 1.0
     for cand in cands:
-        if cand["area"] < 18:
+        if triangle_is_noise(cand, dense_zoom=True, near_callout=True):
             continue
         tx = cand["cx"] + x0
         ty = cand["cy"] + y0

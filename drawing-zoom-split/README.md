@@ -1,8 +1,10 @@
-# Drawing Zoom Split
+# Dual-Pathway Drawing Split (drawing-zoom-split)
 
-Batch-process construction/architecture PDFs: extract plan pages, crop diagrams, split into per-wing images, and export **653px zoom tiles** (10% overlap) for symbol counting.
+Same Stage 1 pipeline as [`../dual-pathway-drawing-split`](../dual-pathway-drawing-split). Prefer that folder for new work.
 
-Standalone folder — pair it with [`../symbol-count-vision`](../symbol-count-vision) for legend symbol counts.
+Batch-process construction/architecture PDFs: extract plan pages, crop diagrams, split into per-wing images, and export **588px zoom tiles** (10% overlap).
+
+Standalone folder — **does not count symbols**. Pair it with [`../symbol-count-vision`](../symbol-count-vision) for legend symbol counts.
 
 ## Docs
 

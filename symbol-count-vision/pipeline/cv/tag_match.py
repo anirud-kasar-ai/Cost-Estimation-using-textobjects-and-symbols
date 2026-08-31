@@ -129,6 +129,11 @@ def match_span_to_tag(
             if upper == "#" or re.fullmatch(r"#\d+", upper):
                 return display
             continue
+        if tag.isdigit():
+            # Legend number tags are exact ("4" ≠ QTY "44" or "4-1").
+            if upper == tag:
+                return display
+            continue
         matched = upper == tag or bool(
             re.fullmatch(re.escape(tag) + r"(?:-\d+|\d+)$", upper)
         )
@@ -138,24 +143,21 @@ def match_span_to_tag(
 
 
 def _normalize_numeric_part(text: str, aliases: set[str]) -> str | None:
-    """Recover part numbers from noisy OCR (``230Q`` → ``2300``, ``9300`` → ``2300``)."""
+    """Recover part numbers from noisy OCR (``230Q`` → ``2300``).
+
+    Nearby models (5410 / 5420 / 5500) must not collapse to WM5400.
+    """
     raw = (text or "").upper()
     cleaned = re.sub(r"[^0-9A-Z]", "", raw).replace("Q", "0").replace("O", "0")
     if cleaned in aliases:
         return cleaned
-    # Exact 4-digit window inside longer reads (``72300`` → ``2300``).
-    if len(cleaned) >= 4:
+    # Exact 4-digit window inside *longer* noisy reads (``72300`` → ``2300``).
+    # Do not slice 4-digit neighbors like 5410 into 5400.
+    if len(cleaned) >= 5:
         for i in range(len(cleaned) - 3):
             chunk = cleaned[i : i + 4]
             if chunk.isdigit() and chunk in aliases:
                 return chunk
-    # One-digit OCR confusion on otherwise matching alias.
-    if len(cleaned) == 4 and cleaned.isdigit():
-        for alias in aliases:
-            if len(alias) != 4 or not alias.isdigit():
-                continue
-            if sum(a != b for a, b in zip(cleaned, alias)) == 1:
-                return alias
     return None
 
 

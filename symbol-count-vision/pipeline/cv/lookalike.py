@@ -82,7 +82,7 @@ def reclassify_j_hook_clusters(
                 cy = _center(cand)[1]
                 if abs(cy - _acy) > max(14.0, ah * 1.25):
                     continue
-                max_gap = max(36.0, max(d.box.x2 - d.box.x1 for d in cluster) * 3.0)
+                max_gap = max(80.0, max(d.box.x2 - d.box.x1 for d in cluster) * 6.0)
                 if any(_x_gap(m, cand) <= max_gap for m in cluster):
                     cluster.append(cand)
                     used.add(j)

@@ -205,6 +205,75 @@ def _run_job(job_id: str) -> None:
             _running.discard(job_id)
 
 
+def _job_inputs_ready(job_id: str) -> bool:
+    out_dir = _job_dir(job_id)
+    if not any(out_dir.glob("symbol_file.*")):
+        return False
+    tiles = out_dir / "tiles"
+    if tiles.is_dir() and any(tiles.iterdir()):
+        return True
+    return any(out_dir.glob("plan_image.*"))
+
+
+def _start_job_thread(job_id: str) -> bool:
+    """Start _run_job if it is not already running. Returns True if started."""
+    with _state_lock:
+        if job_id in _running:
+            return False
+        _running.add(job_id)
+    if config.SYMBOL_COUNT_SYNC_JOBS:
+        _run_job(job_id)
+        return True
+    threading.Thread(target=_run_job, args=(job_id,), daemon=True).start()
+    return True
+
+
+def _resume_orphaned_job(job_id: str, st: JobState) -> JobState:
+    """uvicorn --reload kills the worker thread; resume from files on disk."""
+    if st.status not in {"queued", "processing"}:
+        return st
+    if (_job_dir(job_id) / "result.json").is_file():
+        return _set_job_state(
+            job_id, status="done", stage=None, error=None, finished_at=time.time()
+        )
+    with _state_lock:
+        if job_id in _running:
+            return st
+    if not _job_inputs_ready(job_id):
+        return _set_job_state(
+            job_id,
+            status="failed",
+            error="Job stopped when the server reloaded. Upload again.",
+            finished_at=time.time(),
+        )
+    if _start_job_thread(job_id):
+        logger.warning("Resuming job %s after server restart", job_id)
+        if config.SYMBOL_COUNT_SYNC_JOBS:
+            return _read_job_state(job_id) or st
+        return _set_job_state(job_id, status="processing", error=None)
+    return st
+
+
+def _resume_orphaned_jobs() -> None:
+    import os
+
+    if os.getenv("PYTEST_CURRENT_TEST") or config.SYMBOL_COUNT_SYNC_JOBS:
+        return
+    if not config.STORAGE_DIR.is_dir():
+        return
+    for path in config.STORAGE_DIR.glob("*/job.json"):
+        job_id = path.parent.name
+        st = _read_job_state(job_id)
+        if st is None:
+            continue
+        _resume_orphaned_job(job_id, st)
+
+
+@app.on_event("startup")
+def _on_startup() -> None:
+    _resume_orphaned_jobs()
+
+
 @app.post("/api/jobs")
 async def create_job(
     symbol_file: UploadFile = File(...),
@@ -311,6 +380,8 @@ def job_detail(job_id: str) -> dict[str, Any]:
                 _job_states[job_id] = st
     if st is None:
         raise HTTPException(status_code=404, detail="Job not found")
+    if st.status in {"queued", "processing"}:
+        st = _resume_orphaned_job(job_id, st)
     return {
         "job_id": job_id,
         "status": st.status,

@@ -1,22 +1,5 @@
 export type JobStatus = 'queued' | 'processing' | 'done' | 'failed';
 
-export type SymbolCountStatus = 'done' | 'skipped' | 'failed';
-
-export interface SymbolCountRow {
-  symbol: string;
-  description: string;
-  mfg_model: string;
-  part_number: string;
-  counts: Record<string, number>;
-  total: number;
-}
-
-export interface SymbolCountReport {
-  status: string;
-  columns: string[];
-  rows: SymbolCountRow[];
-}
-
 export interface ProjectMetadata {
   title: string | null;
   client: string | null;
@@ -65,12 +48,5 @@ export interface JobDetail extends JobSummary {
   requirement_provider?: string | null;
   symbol_entry_count?: number;
   sheet_notes_item_count?: number;
-  symbol_count_status?: SymbolCountStatus | null;
-  symbol_count_instances?: number;
-  symbol_count_report_csv?: string;
-  symbol_count_report_pdf?: string;
-  symbol_count_report_json?: string;
-  symbol_count_reason?: string;
-  symbol_count_error?: string;
   metadata?: ProjectMetadata;
 }

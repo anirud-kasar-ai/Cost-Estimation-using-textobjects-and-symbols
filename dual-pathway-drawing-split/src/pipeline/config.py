@@ -9,10 +9,6 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 load_dotenv(ROOT / ".env", override=True)
-# Reuse sibling project credentials when this folder has no .env yet.
-_sibling_env = ROOT.parent / "vision-extraction" / ".env"
-if _sibling_env.is_file():
-    load_dotenv(_sibling_env, override=False)
 
 STORAGE_DIR = ROOT / "storage" / "jobs"
 REQUIREMENTS_DIR = ROOT / "storage" / "requirements"
@@ -75,22 +71,8 @@ VISION_PDF_DPI = _int("VISION_PDF_DPI", 200)
 VISION_LLAMA_MAX_SIDE = _int("VISION_LLAMA_MAX_SIDE", 1280)
 
 # Smaller tiles = more zoom crops per wing (closer view of each plan area).
-ROI_ZOOM_TILE_SIZE = _int("ROI_ZOOM_TILE_SIZE", 653)
+ROI_ZOOM_TILE_SIZE = _int("ROI_ZOOM_TILE_SIZE", 588)
 ROI_ZOOM_OVERLAP_PCT = _float("ROI_ZOOM_OVERLAP_PCT", 0.10)
-
-SYMBOL_COUNT_DIR = "06_symbol_counts"
-
-SYMBOL_COUNT_ENABLED = _bool("SYMBOL_COUNT_ENABLED", True)
-SYMBOL_COUNT_NMS_IOU = _float("SYMBOL_COUNT_NMS_IOU", 0.5)
-SYMBOL_COUNT_LLM_WORKERS = _int("SYMBOL_COUNT_LLM_WORKERS", 1)
-SYMBOL_COUNT_USE_FULL_WING_THRESHOLD = _float(
-    "SYMBOL_COUNT_USE_FULL_WING_THRESHOLD", 1.5
-)
-SYMBOL_COUNT_MIN_CONFIDENCE = _float("SYMBOL_COUNT_MIN_CONFIDENCE", 0.6)
-
-SYMBOL_COUNT_CV_THRESHOLD = _float("SYMBOL_COUNT_CV_THRESHOLD", 0.85)
-SYMBOL_COUNT_CV_SCALES: list[float] = [1.0]
-GLYPHS_DIR = "07_glyphs"
 
 EXTRACTION_CACHE_ENABLED = _bool("EXTRACTION_CACHE_ENABLED", True)
 # PDF pixmap crops for every sheet-note callout; slow on large sets.
