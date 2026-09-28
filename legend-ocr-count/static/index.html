@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Legend OCR Callout Count</title>
+    <style>
+      :root {
+        --ink: #15202b;
+        --muted: #5a6a7a;
+        --line: #cfd8e3;
+        --bg: #e8eef4;
+        --card: #f7fafc;
+        --accent: #0f6a6a;
+        --accent-2: #c45c26;
+        --shadow: 0 10px 28px rgba(21, 32, 43, 0.08);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          linear-gradient(165deg, #d9e6ef 0%, transparent 42%),
+          linear-gradient(345deg, #f0ebe3 0%, transparent 38%),
+          var(--bg);
+        min-height: 100vh;
+      }
+      header {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 16px;
+        padding: 22px 32px 14px;
+        border-bottom: 1px solid var(--line);
+        background: rgba(247, 250, 252, 0.85);
+        backdrop-filter: blur(8px);
+      }
+      header h1 {
+        margin: 0;
+        font-size: 21px;
+        letter-spacing: 0.02em;
+        font-weight: 700;
+      }
+      header p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+        max-width: 720px;
+      }
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 22px 20px 72px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      @media (max-width: 900px) {
+        .grid { grid-template-columns: 1fr; }
+      }
+      .drop {
+        border: 1.5px dashed #9aabbc;
+        background: var(--card);
+        border-radius: 12px;
+        padding: 28px 18px;
+        text-align: center;
+        box-shadow: var(--shadow);
+        cursor: pointer;
+        transition: border-color 0.15s, transform 0.15s;
+        min-height: 150px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+      }
+      .drop.drag {
+        border-color: var(--accent);
+        transform: translateY(-1px);
+      }
+      .drop strong { display: block; font-size: 15px; }
+      .drop span { color: var(--muted); font-size: 13px; }
+      input[type="file"] { display: none; }
+      .actions {
+        margin-top: 16px;
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      button {
+        border: 0;
+        padding: 11px 16px;
+        border-radius: 9px;
+        background: #15202b;
+        color: white;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.55; cursor: not-allowed; }
+      .status {
+        margin-top: 16px;
+        padding: 14px 16px;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        display: none;
+      }
+      .status.show { display: block; }
+      .bar {
+        height: 6px;
+        background: #dde5ee;
+        border-radius: 99px;
+        overflow: hidden;
+        margin: 10px 0 6px;
+      }
+      .bar > i {
+        display: block;
+        height: 100%;
+        width: 42%;
+        background: var(--accent);
+        animation: slide 1.1s ease-in-out infinite alternate;
+      }
+      @keyframes slide {
+        from { margin-left: 0; }
+        to { margin-left: 58%; }
+      }
+      .results {
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 16px;
+        align-items: start;
+      }
+      @media (max-width: 900px) {
+        .results { grid-template-columns: 1fr; }
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--card);
+        box-shadow: var(--shadow);
+        padding: 14px;
+      }
+      .thumbs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 10px;
+      }
+      .thumb-frame {
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        overflow: hidden;
+        background: #fff;
+        min-height: 110px;
+      }
+      .thumb-frame img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        text-align: left;
+        padding: 8px 6px;
+        border-bottom: 1px solid #e2e8f0;
+        font-size: 13px;
+        vertical-align: top;
+      }
+      th { color: var(--muted); font-weight: 700; }
+      .row-zero { opacity: 0.5; }
+      .error { color: #a33b3b; font-weight: 600; }
+      .small { color: var(--muted); font-size: 12px; }
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: #d9efe9;
+        color: #0f4f4f;
+        font-size: 11px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Legend + YOLO Symbol Count</h1>
+        <p>
+          Upload a <strong>SYMBOL LEGEND</strong> plus a plan drawing (single image or folder).
+          <strong>YOLO</strong> detects and counts symbols matched to the legend.
+          Circled callout OCR is paused — set <code>CALLOUT_OCR_ENABLED=true</code> in <code>.env</code> to turn it back on.
+        </p>
+      </div>
+      <div class="small" id="healthline">Loading…</div>
+    </header>
+    <main>
+      <div class="grid">
+        <div class="drop" id="legendDrop">
+          <strong>Symbol legend</strong>
+          <span>Image or PDF of the numbered SYMBOL LEGEND</span>
+          <span id="legendName" class="small">No file selected</span>
+          <input id="legendInput" type="file" accept=".png,.jpg,.jpeg,.webp,.pdf" />
+        </div>
+        <div class="drop" id="imageDrop">
+          <strong>Plan / drawing image</strong>
+          <span>Single roof plan or sheet (PNG / JPG)</span>
+          <span id="imageName" class="small">No file selected</span>
+          <input id="imageInput" type="file" accept=".jpg,.jpeg,.png,.webp" />
+        </div>
+      </div>
+      <div class="drop" id="folderDrop" style="margin-top:16px;min-height:110px;">
+        <strong>Drawing folder (optional)</strong>
+        <span>Upload a zooms folder (include <code>zooms_manifest.json</code> so 10% tile overlap is not counted twice)</span>
+        <span id="folderName" class="small">No folder selected</span>
+        <input id="folderInput" type="file" webkitdirectory multiple />
+      </div>
+
+      <div class="actions">
+        <button id="runBtn" disabled>Count Symbols</button>
+        <label class="small" style="display:flex;gap:8px;align-items:center;">
+          <input type="checkbox" id="hideZero" checked />
+          Hide zero-count rows
+        </label>
+        <span class="badge" id="modeBadge">YOLO only</span>
+      </div>
+
+      <div class="status" id="statusBox">
+        <div style="font-weight:700;margin-bottom:6px;" id="statusTitle">Working…</div>
+        <div class="bar"><i></i></div>
+        <div class="small" id="statusText"></div>
+        <div class="error" id="errorText" style="display:none;margin-top:8px;"></div>
+      </div>
+
+      <div class="results" id="resultsBox" style="display:none;">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;">
+            <div>
+              <div style="font-weight:800;margin-bottom:4px;">Detection overlay</div>
+              <div class="small">YOLO symbol boxes only (callout OCR paused)</div>
+            </div>
+            <div class="small">Job: <span id="jobIdLabel"></span></div>
+          </div>
+          <div class="thumbs">
+            <div>
+              <div class="small" style="margin-bottom:4px;">Original</div>
+              <div class="thumb-frame"><img id="imgOriginal" alt="original" /></div>
+            </div>
+            <div>
+              <div class="small" style="margin-bottom:4px;">Overlay</div>
+              <div class="thumb-frame"><img id="imgOverlay" alt="overlay" /></div>
+            </div>
+          </div>
+          <div style="margin-top:12px;">
+            <a id="downloadResult" class="small" href="#" target="_blank" style="text-decoration:none;">Download result.json</a>
+          </div>
+        </div>
+
+        <div class="card">
+          <div style="font-weight:800;margin-bottom:6px;">Symbol counts</div>
+          <div class="small" id="summaryLine"></div>
+          <div class="small" id="noteLine" style="margin-top:6px;"></div>
+          <div style="margin-top:10px; overflow:auto; max-height: 520px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th style="width:110px;">Detail</th>
+                  <th style="width:90px;">Method</th>
+                  <th style="width:60px;">YOLO</th>
+                  <th style="width:70px;">Count</th>
+                </tr>
+              </thead>
+              <tbody id="rowsTbody"></tbody>
+            </table>
+          </div>
+          <div id="unknownBox" style="margin-top:14px;display:none;">
+            <div style="font-weight:700;margin-bottom:6px;">Callout numbers not in legend</div>
+            <table>
+              <thead>
+                <tr><th style="width:70px;">No.</th><th>Count</th></tr>
+              </thead>
+              <tbody id="unknownTbody"></tbody>
+            </table>
+          </div>
+          <div id="yoloUnmatchedBox" style="margin-top:14px;display:none;">
+            <div style="font-weight:700;margin-bottom:6px;">YOLO detected — not matched to legend</div>
+            <table>
+              <thead>
+                <tr>
+                  <th>YOLO class</th>
+                  <th style="width:70px;">Count</th>
+                  <th>Why</th>
+                </tr>
+              </thead>
+              <tbody id="yoloUnmatchedTbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const legendDrop = document.getElementById('legendDrop');
+      const imageDrop = document.getElementById('imageDrop');
+      const folderDrop = document.getElementById('folderDrop');
+      const legendInput = document.getElementById('legendInput');
+      const imageInput = document.getElementById('imageInput');
+      const folderInput = document.getElementById('folderInput');
+      const legendName = document.getElementById('legendName');
+      const imageName = document.getElementById('imageName');
+      const folderName = document.getElementById('folderName');
+      const runBtn = document.getElementById('runBtn');
+      const hideZero = document.getElementById('hideZero');
+
+      const statusBox = document.getElementById('statusBox');
+      const statusText = document.getElementById('statusText');
+      const errorText = document.getElementById('errorText');
+      const statusTitle = document.getElementById('statusTitle');
+      const resultsBox = document.getElementById('resultsBox');
+      const rowsTbody = document.getElementById('rowsTbody');
+      const unknownBox = document.getElementById('unknownBox');
+      const unknownTbody = document.getElementById('unknownTbody');
+      const yoloUnmatchedBox = document.getElementById('yoloUnmatchedBox');
+      const yoloUnmatchedTbody = document.getElementById('yoloUnmatchedTbody');
+      const summaryLine = document.getElementById('summaryLine');
+      const noteLine = document.getElementById('noteLine');
+      const jobIdLabel = document.getElementById('jobIdLabel');
+      const imgOriginal = document.getElementById('imgOriginal');
+      const imgOverlay = document.getElementById('imgOverlay');
+      const downloadResult = document.getElementById('downloadResult');
+      const healthline = document.getElementById('healthline');
+      const modeBadge = document.getElementById('modeBadge');
+
+      let legendFile = null;
+      let imageFile = null;
+      let planFiles = [];
+
+      const IMG_EXTS = ['.jpg', '.jpeg', '.png', '.webp'];
+
+      function isPlanImage(file) {
+        const base = (file.name || '').toLowerCase();
+        return IMG_EXTS.some((ext) => base.endsWith(ext));
+      }
+
+      function isFolderUpload(file) {
+        const base = (file.name || '').toLowerCase();
+        if (base === 'zooms_manifest.json') return true;
+        return isPlanImage(file);
+      }
+
+      function updateButton() {
+        runBtn.disabled = !(legendFile && (imageFile || planFiles.length));
+      }
+
+      function setDrag(el, on) {
+        el.classList.toggle('drag', on);
+      }
+
+      function setPlanFiles(fileList) {
+        planFiles = Array.from(fileList || []).filter(isFolderUpload);
+        const imgs = planFiles.filter(isPlanImage);
+        if (imgs.length) {
+          imageFile = null;
+          imageInput.value = '';
+          imageName.textContent = 'Using folder (single image cleared)';
+          const hasManifest = planFiles.some((f) => (f.name || '').toLowerCase() === 'zooms_manifest.json');
+          folderName.textContent = `${imgs.length} plan image(s)` +
+            (hasManifest ? ' + zooms_manifest.json (overlap merge on)' : ' — add zooms_manifest.json to merge 10% overlap');
+        } else {
+          folderName.textContent = 'No plan images found in folder';
+          planFiles = [];
+        }
+        updateButton();
+      }
+
+      legendDrop.addEventListener('click', () => legendInput.click());
+      imageDrop.addEventListener('click', () => imageInput.click());
+      folderDrop.addEventListener('click', () => folderInput.click());
+
+      [['legend', legendDrop, legendInput], ['image', imageDrop, imageInput], ['folder', folderDrop, folderInput]].forEach(([kind, drop, input]) => {
+        drop.addEventListener('dragover', (e) => { e.preventDefault(); setDrag(drop, true); });
+        drop.addEventListener('dragleave', () => setDrag(drop, false));
+        drop.addEventListener('drop', (e) => {
+          e.preventDefault();
+          setDrag(drop, false);
+          if (!e.dataTransfer.files || !e.dataTransfer.files.length) return;
+          if (kind === 'legend') {
+            legendFile = e.dataTransfer.files[0];
+            legendName.textContent = legendFile.name;
+            updateButton();
+          } else if (kind === 'image') {
+            imageFile = e.dataTransfer.files[0];
+            imageName.textContent = imageFile.name;
+            planFiles = [];
+            folderInput.value = '';
+            folderName.textContent = 'No folder selected';
+            updateButton();
+          } else {
+            setPlanFiles(e.dataTransfer.files);
+          }
+        });
+      });
+
+      legendInput.addEventListener('change', () => {
+        legendFile = legendInput.files && legendInput.files[0] ? legendInput.files[0] : null;
+        legendName.textContent = legendFile ? legendFile.name : 'No file selected';
+        updateButton();
+      });
+      imageInput.addEventListener('change', () => {
+        imageFile = imageInput.files && imageInput.files[0] ? imageInput.files[0] : null;
+        if (imageFile) {
+          imageName.textContent = imageFile.name;
+          planFiles = [];
+          folderInput.value = '';
+          folderName.textContent = 'No folder selected';
+        } else {
+          imageName.textContent = 'No file selected';
+        }
+        updateButton();
+      });
+      folderInput.addEventListener('change', () => setPlanFiles(folderInput.files));
+
+      async function pollJob(jobId) {
+        while (true) {
+          const resp = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`);
+          if (!resp.ok) throw new Error(`Job status fetch failed: ${resp.status}`);
+          const data = await resp.json();
+          if (data.status === 'done' || data.status === 'failed') return data;
+          statusText.textContent = data.stage ? data.stage : data.status;
+          await new Promise((r) => setTimeout(r, 1500));
+        }
+      }
+
+      function cleanDescription(text) {
+        // Strip leading legend index: "3. CURB" / "6) ROOF DRAIN" → name only
+        return String(text || '')
+          .replace(/^\s*\d{1,3}\s*[.)\-:,]\s*/u, '')
+          .trim();
+      }
+
+      function renderRows(rows) {
+        rowsTbody.innerHTML = '';
+        const list = hideZero.checked
+          ? rows.filter((r) => Number(r.count) > 0 || Number(r.yolo_count) > 0)
+          : rows;
+        for (const r of list) {
+          const tr = document.createElement('tr');
+          if (Number(r.count) === 0) tr.className = 'row-zero';
+          const method = (r.method || '').toString();
+          const desc = cleanDescription(r.description);
+          tr.innerHTML = `
+            <td>${desc}</td>
+            <td class="small">${(r.detail_ref || '').toString()}</td>
+            <td class="small">${method}</td>
+            <td>${Number(r.yolo_count) || 0}</td>
+            <td><strong>${Number(r.count) || 0}</strong></td>
+          `;
+          rowsTbody.appendChild(tr);
+        }
+      }
+
+      function renderUnknown(unknown) {
+        unknownTbody.innerHTML = '';
+        if (!unknown || !unknown.length) {
+          unknownBox.style.display = 'none';
+          return;
+        }
+        unknownBox.style.display = 'block';
+        for (const u of unknown) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${u.number}</td><td>${Number(u.count) || 0}</td>`;
+          unknownTbody.appendChild(tr);
+        }
+      }
+
+      function renderYoloUnmatched(items) {
+        yoloUnmatchedTbody.innerHTML = '';
+        if (!items || !items.length) {
+          yoloUnmatchedBox.style.display = 'none';
+          return;
+        }
+        yoloUnmatchedBox.style.display = 'block';
+        for (const u of items) {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${(u.class_name || '').toString()}</td>
+            <td>${Number(u.count) || 0}</td>
+            <td class="small">${(u.reason || 'not matched to legend').toString()}</td>
+          `;
+          yoloUnmatchedTbody.appendChild(tr);
+        }
+      }
+
+      let lastResult = null;
+      hideZero.addEventListener('change', () => {
+        if (lastResult) renderRows(lastResult.rows || []);
+      });
+
+      runBtn.addEventListener('click', async () => {
+        if (!legendFile || !(imageFile || planFiles.length)) return;
+        resultsBox.style.display = 'none';
+        statusBox.classList.add('show');
+        statusTitle.textContent = 'Working…';
+        statusText.textContent = 'Uploading…';
+        errorText.style.display = 'none';
+        errorText.textContent = '';
+        runBtn.disabled = true;
+
+        try {
+          const form = new FormData();
+          form.append('legend_file', legendFile, legendFile.name);
+          if (planFiles.length) {
+            for (const f of planFiles) form.append('plan_files', f, f.name);
+          } else {
+            form.append('image_file', imageFile, imageFile.name);
+          }
+          const createResp = await fetch('/api/jobs', { method: 'POST', body: form });
+          if (!createResp.ok) {
+            const err = await createResp.json().catch(() => ({}));
+            throw new Error(err.detail || `Upload failed (${createResp.status})`);
+          }
+          const { job_id: jobId } = await createResp.json();
+          statusText.textContent = 'queued';
+          const done = await pollJob(jobId);
+          if (done.status === 'failed') throw new Error(done.error || 'Job failed');
+
+          const resultResp = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/result.json`);
+          if (!resultResp.ok) throw new Error('Could not load result.json');
+          const result = await resultResp.json();
+          lastResult = result;
+
+          jobIdLabel.textContent = jobId;
+          const bust = `?t=${Date.now()}`;
+          imgOriginal.src = `/api/jobs/${encodeURIComponent(jobId)}/plan-image${bust}`;
+          imgOverlay.src = `/api/jobs/${encodeURIComponent(jobId)}/overlay.png${bust}`;
+          downloadResult.href = `/api/jobs/${encodeURIComponent(jobId)}/result.json`;
+
+          const rows = result.rows || [];
+          const found = rows.filter((r) => Number(r.count) > 0).length;
+          summaryLine.textContent =
+            `count=${result.total_count || 0} · yolo=${result.total_yolo || 0} · ` +
+            `${found}/${rows.length} legend rows · ` +
+            `method=${result.method || ''} · mode=${result.mode || 'single'}`;
+          noteLine.textContent = result.note || '';
+          renderRows(rows);
+          if (result.callout_ocr_enabled) {
+            renderUnknown(result.unknown_numbers || []);
+          } else {
+            unknownBox.style.display = 'none';
+            unknownTbody.innerHTML = '';
+          }
+          renderYoloUnmatched(result.yolo_unmatched || []);
+
+          statusTitle.textContent = 'Done';
+          statusText.textContent = result.callout_ocr_enabled
+            ? (result.yolo_enabled ? 'YOLO + OCR counting finished' : 'OCR callout counting finished')
+            : 'YOLO symbol counting finished';
+          resultsBox.style.display = 'grid';
+        } catch (err) {
+          statusTitle.textContent = 'Failed';
+          errorText.style.display = 'block';
+          errorText.textContent = (err && err.message) ? err.message : String(err);
+        } finally {
+          updateButton();
+        }
+      });
+
+      fetch('/api/health')
+        .then((r) => r.json())
+        .then((h) => {
+          const tess = h.tesseract_available ? 'Tesseract ready' : 'Tesseract missing';
+          const yolo = h.yolo
+            ? `YOLO ready (${h.yolo_model || 'model'})`
+            : 'YOLO off';
+          const ocr = h.callout_ocr ? 'callout OCR on' : 'callout OCR paused';
+          healthline.textContent = `${yolo} · ${ocr} · ${tess}`;
+          if (h.yolo && h.callout_ocr) modeBadge.textContent = 'OCR + YOLO';
+          else if (h.yolo) modeBadge.textContent = 'YOLO only';
+          else if (h.callout_ocr) modeBadge.textContent = 'OCR only';
+          else modeBadge.textContent = 'Disabled';
+        })
+        .catch(() => { healthline.textContent = 'API offline'; });
+    </script>
+  </body>
+</html>

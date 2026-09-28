@@ -1,0 +1,10 @@
+{
+  "model": "legend-ocr-count\\model\\symbol_detector_best.pt",
+  "dataset": "eval_data\\test_small_9c",
+  "split": "test",
+  "gt": 283,
+  "detected": 190,
+  "threshold_miss": 59,
+  "tta_only": 7,
+  "undetected": 27
+}

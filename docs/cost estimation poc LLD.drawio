@@ -1,0 +1,134 @@
+<mxfile host="app.diagrams.net">
+  <diagram name="LLD" id="0V3xwSUXLaUn_IDGmAMu">
+    <mxGraphModel dx="1935" dy="1243" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="aBocdAfBSyyknQOjeljb-1" parent="1" style="text;html=1;fontSize=20;fontStyle=1;align=center;verticalAlign=middle;" value="Cost Estimation Using Text and Object — Low-Level Design (POC)" vertex="1">
+          <mxGeometry height="40" width="1480" x="360" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-2" parent="1" style="swimlane;horizontal=0;startSize=30;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;swimlaneFillColor=#f3f8fe;" value="Frontend — i-TAB Estimator Pro&amp;nbsp;" vertex="1">
+          <mxGeometry height="230" width="1480" x="340" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-3" parent="aBocdAfBSyyknQOjeljb-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="src/lib/api.ts&lt;br&gt;&lt;b&gt;Typed API client&lt;/b&gt; — API_BASE=/api&lt;br&gt;(Vite proxy → backend :8767)" vertex="1">
+          <mxGeometry height="75" width="340" x="50" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-4" parent="aBocdAfBSyyknQOjeljb-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" value="src/lib/estimator-data.tsx — &lt;b&gt;EstimatorProvider&lt;/b&gt;&lt;br&gt;polls /api/jobs every 2.5s while busy (else 15s)&lt;br&gt;line-item merge: local edits → saved corrections → model counts" vertex="1">
+          <mxGeometry height="75" width="560" x="420" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-5" parent="aBocdAfBSyyknQOjeljb-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" value="index.tsx&lt;br&gt;&lt;b&gt;Upload&lt;/b&gt; (single + batch ≤10),&lt;br&gt;recent uploads, invoice download" vertex="1">
+          <mxGeometry height="70" width="270" x="50" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-6" parent="aBocdAfBSyyknQOjeljb-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" value="report.tsx&lt;br&gt;&lt;b&gt;Report&lt;/b&gt; — counts, confidence,&lt;br&gt;detection overlay, legend" vertex="1">
+          <mxGeometry height="70" width="270" x="334" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-7" parent="aBocdAfBSyyknQOjeljb-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" value="pricing.tsx&lt;br&gt;&lt;b&gt;Pricing editor&lt;/b&gt;&lt;br&gt;(override + reason)" vertex="1">
+          <mxGeometry height="70" width="270" x="618" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-8" parent="aBocdAfBSyyknQOjeljb-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" value="invoice.tsx&lt;br&gt;&lt;b&gt;Invoice&lt;/b&gt;&lt;br&gt;(editable tax rate)" vertex="1">
+          <mxGeometry height="70" width="270" x="902" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-9" parent="aBocdAfBSyyknQOjeljb-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11;" value="metrics.tsx&lt;br&gt;&lt;b&gt;Model statistics&lt;/b&gt;&lt;br&gt;(training + observed metrics)" vertex="1">
+          <mxGeometry height="70" width="270" x="1186" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-10" parent="1" style="swimlane;horizontal=0;startSize=30;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;swimlaneFillColor=#f5faf4;" value="Backend — FastAPI app.py (:8767)" vertex="1">
+          <mxGeometry height="210" width="1480" x="360" y="580" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-11" parent="aBocdAfBSyyknQOjeljb-10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" value="&lt;b&gt;Job queue&lt;/b&gt;&lt;br&gt;ThreadPoolExecutor(max_workers=2)&lt;br&gt;_running set + _job_lock (dedupe)&lt;br&gt;status: queued → processing → done | failed" vertex="1">
+          <mxGeometry height="130" width="440" x="50" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-12" parent="aBocdAfBSyyknQOjeljb-10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;align=left;spacingLeft=8;" value="&lt;b&gt;REST endpoints&lt;/b&gt;&lt;br&gt;POST /api/jobs (upload, dedupe to running job) · GET /api/jobs · GET /api/jobs/{id}/counts&lt;br&gt;GET /api/jobs/{id}/overlay · GET+PUT /api/jobs/{id}/corrections · PUT /api/jobs/{id}/tax (rebuild invoice)&lt;br&gt;GET+PUT /api/pricing (override + reason, CSV-lock probe) · GET /api/stats&lt;br&gt;GET /api/jobs/{id}/files/* (path-traversal-safe artifact serving)" vertex="1">
+          <mxGeometry height="150" width="710" x="520" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-13" parent="aBocdAfBSyyknQOjeljb-10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;" value="&lt;b&gt;Restart-safe&lt;/b&gt;&lt;br&gt;startup hook re-queues jobs left queued / processing by a previous run" vertex="1">
+          <mxGeometry height="130" width="190" x="1260" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-14" parent="1" style="swimlane;horizontal=0;startSize=30;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;swimlaneFillColor=#fffaf4;" value="Pipeline — drawing-zoom-split/src/pipeline · process_job(job_id)" vertex="1">
+          <mxGeometry height="390" width="1480" x="480" y="810" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-15" parent="aBocdAfBSyyknQOjeljb-14" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="&lt;b&gt;1. extracting&lt;/b&gt;&lt;br&gt;extraction/ →&lt;br&gt;symbol_table.json (legend rows)" vertex="1">
+          <mxGeometry height="110" width="260" x="50" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-16" parent="aBocdAfBSyyknQOjeljb-14" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="&lt;b&gt;2. rendering&lt;/b&gt;&lt;br&gt;page_render.py (PyMuPDF, 200 DPI)&lt;br&gt;→ 01_pages/*.png" vertex="1">
+          <mxGeometry height="110" width="260" x="330" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-17" parent="aBocdAfBSyyknQOjeljb-14" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="&lt;b&gt;3. loading_model&lt;/b&gt;&lt;br&gt;connect Vision LLM&lt;br&gt;(Groq Qwen)" vertex="1">
+          <mxGeometry height="110" width="260" x="610" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-18" parent="aBocdAfBSyyknQOjeljb-14" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="&lt;b&gt;4. classifying&lt;/b&gt;&lt;br&gt;Vision LLM: drawing vs legend/notes&lt;br&gt;→ 02_classified" vertex="1">
+          <mxGeometry height="110" width="260" x="890" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-19" parent="aBocdAfBSyyknQOjeljb-14" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="&lt;b&gt;5. drawing_crop&lt;/b&gt;&lt;br&gt;crop drawing region&lt;br&gt;→ 03_diagrams" vertex="1">
+          <mxGeometry height="110" width="260" x="1170" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-20" parent="aBocdAfBSyyknQOjeljb-14" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="&lt;b&gt;6. wing_map + wing_crop&lt;/b&gt;&lt;br&gt;Vision LLM wing mapping&lt;br&gt;→ 04_wings/*.png" vertex="1">
+          <mxGeometry height="140" width="260" x="50" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-21" parent="aBocdAfBSyyknQOjeljb-14" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;align=left;spacingLeft=8;" value="&lt;b&gt;7. zoom + counting&lt;/b&gt; — count_stage.py + yolo_detect.py&lt;br&gt;zoom tiles (05_zoom) · YOLO auto-model-selection (score model/*.pt classes vs legend via yolo_class_map.py) · detect per tile (class, conf, bbox, wing_folder) · aggregate wing → page → total ·&amp;nbsp;" vertex="1">
+          <mxGeometry height="140" width="500" x="330" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-22" parent="aBocdAfBSyyknQOjeljb-14" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="&lt;b&gt;8. pricing&lt;/b&gt; — pricing.py&lt;br&gt;device_prices.csv + price_overrides.json&lt;br&gt;build_invoice(tax_rate = 0.045 default)" vertex="1">
+          <mxGeometry height="140" width="300" x="850" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-23" parent="aBocdAfBSyyknQOjeljb-14" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" value="&lt;b&gt;9. invoice&lt;/b&gt; — invoice_pdf.py (ReportLab)&lt;br&gt;→ 06_counts/invoice.{json, csv, pdf}" vertex="1">
+          <mxGeometry height="140" width="260" x="1170" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-24" edge="1" parent="aBocdAfBSyyknQOjeljb-14" source="aBocdAfBSyyknQOjeljb-15" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;" target="aBocdAfBSyyknQOjeljb-16">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-25" edge="1" parent="aBocdAfBSyyknQOjeljb-14" source="aBocdAfBSyyknQOjeljb-16" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;" target="aBocdAfBSyyknQOjeljb-17">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-26" edge="1" parent="aBocdAfBSyyknQOjeljb-14" source="aBocdAfBSyyknQOjeljb-17" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;" target="aBocdAfBSyyknQOjeljb-18">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-27" edge="1" parent="aBocdAfBSyyknQOjeljb-14" source="aBocdAfBSyyknQOjeljb-18" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;" target="aBocdAfBSyyknQOjeljb-19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-28" edge="1" parent="aBocdAfBSyyknQOjeljb-14" source="aBocdAfBSyyknQOjeljb-19" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="aBocdAfBSyyknQOjeljb-20">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1300" y="185" />
+              <mxPoint x="180" y="185" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-29" edge="1" parent="aBocdAfBSyyknQOjeljb-14" source="aBocdAfBSyyknQOjeljb-20" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;" target="aBocdAfBSyyknQOjeljb-21">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-30" edge="1" parent="aBocdAfBSyyknQOjeljb-14" source="aBocdAfBSyyknQOjeljb-21" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;" target="aBocdAfBSyyknQOjeljb-22">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-31" edge="1" parent="aBocdAfBSyyknQOjeljb-14" source="aBocdAfBSyyknQOjeljb-22" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;" target="aBocdAfBSyyknQOjeljb-23">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-32" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;" value="&lt;b&gt;Storage (file system) — storage/&amp;lt;job_id&amp;gt;/&lt;/b&gt;&lt;br&gt;00_source | 01_pages | 02_classified | 03_diagrams | 04_wings | 05_zoom | 06_counts (result.json, invoice.*) | job.json (status/stage/progress/eta) | symbol_table.json | corrections.json | summary.json&lt;br&gt;pricing/device_prices.csv + price_overrides.json · model/*.pt (YOLO weights + embedded training metrics)" vertex="1">
+          <mxGeometry height="100" width="1480" x="360" y="1240" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-33" edge="1" parent="1" source="aBocdAfBSyyknQOjeljb-23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#666666;fontSize=10;" target="aBocdAfBSyyknQOjeljb-32" value="write artifacts">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-34" edge="1" parent="1" source="aBocdAfBSyyknQOjeljb-5" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;fontColor=#b85450;strokeWidth=2;fontSize=11;fontStyle=1;exitX=0.25;exitY=1;entryX=0.25;entryY=0;" target="aBocdAfBSyyknQOjeljb-12" value="(1) POST /api/jobs — upload, job folder created, status queued">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-35" edge="1" parent="1" source="aBocdAfBSyyknQOjeljb-11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;fontColor=#b85450;strokeWidth=2;fontSize=11;fontStyle=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" target="aBocdAfBSyyknQOjeljb-15" value="(2) executor runs stages 1–9, writes job.json progress per stage">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-36" edge="1" parent="1" source="aBocdAfBSyyknQOjeljb-4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;fontColor=#b85450;strokeWidth=2;fontSize=11;fontStyle=1;exitX=0.75;exitY=1;entryX=0.5;entryY=0;" target="aBocdAfBSyyknQOjeljb-12" value="(3) poll GET /api/jobs — progress bar + ETA">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-37" edge="1" parent="1" source="aBocdAfBSyyknQOjeljb-32" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;fontColor=#b85450;strokeWidth=2;fontSize=11;fontStyle=1;exitX=0;exitY=0.5;entryX=0;entryY=1;" target="aBocdAfBSyyknQOjeljb-6" value="(4) done: fetch counts, overlay, legend, invoice">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="340" y="1290" />
+              <mxPoint x="340" y="530" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="aBocdAfBSyyknQOjeljb-38" edge="1" parent="1" source="aBocdAfBSyyknQOjeljb-7" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#b85450;fontColor=#b85450;strokeWidth=2;fontSize=11;fontStyle=1;exitX=0.75;exitY=1;entryX=0.75;entryY=0;" target="aBocdAfBSyyknQOjeljb-12" value="(5) PUT corrections / pricing / tax → artifacts updated, invoice regenerated">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

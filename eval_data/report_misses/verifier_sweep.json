@@ -1,0 +1,38 @@
+{
+  "0.5": {
+    "fp_caught": 328,
+    "fp_caught_pct": 67.5,
+    "tp_lost": 51,
+    "tp_lost_pct": 11.1
+  },
+  "0.6": {
+    "fp_caught": 295,
+    "fp_caught_pct": 60.7,
+    "tp_lost": 42,
+    "tp_lost_pct": 9.2
+  },
+  "0.7": {
+    "fp_caught": 246,
+    "fp_caught_pct": 50.6,
+    "tp_lost": 37,
+    "tp_lost_pct": 8.1
+  },
+  "0.8": {
+    "fp_caught": 187,
+    "fp_caught_pct": 38.5,
+    "tp_lost": 20,
+    "tp_lost_pct": 4.4
+  },
+  "0.9": {
+    "fp_caught": 100,
+    "fp_caught_pct": 20.6,
+    "tp_lost": 11,
+    "tp_lost_pct": 2.4
+  },
+  "0.95": {
+    "fp_caught": 47,
+    "fp_caught_pct": 9.7,
+    "tp_lost": 5,
+    "tp_lost_pct": 1.1
+  }
+}

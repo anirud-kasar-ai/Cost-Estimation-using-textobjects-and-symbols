@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Dual-Pathway Drawing Split</title>
+  <title>Drawing Split · Symbol Count · Cost Invoice</title>
   <style>
     :root {
       --ink: #1c2330;
@@ -37,7 +37,7 @@
     }
     header h1 { margin: 0; font-size: 22px; font-weight: 650; }
     header p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
-    header .model { font-size: 12px; color: var(--muted); }
+    header .model { font-size: 12px; color: var(--muted); text-align: right; max-width: 420px; }
     main { max-width: 1180px; margin: 0 auto; padding: 28px 24px 80px; }
     .drop {
       border: 1.5px dashed #b9c0ce;
@@ -63,10 +63,13 @@
     .bar > i { display: block; height: 100%; width: 18%; background: linear-gradient(90deg, var(--accent), #60a5fa); border-radius: 99px; animation: pulse 1.4s ease-in-out infinite; }
     .bar.done > i { width: 100%; animation: none; background: var(--ok); }
     .bar.fail > i { width: 100%; animation: none; background: var(--fail); }
+    .bar.live > i { animation: none; transition: width 0.8s ease; }
+    .eta { font-size: 13px; color: var(--accent-dark); font-weight: 600; margin-top: 2px; }
     @keyframes pulse { 0%,100% { width: 18%; } 50% { width: 72%; } }
     .meta { font-size: 13px; color: var(--muted); }
-    .btn { border: 0; background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block; }
+    .btn { border: 0; background: var(--accent); color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block; margin-right: 8px; margin-top: 6px; }
     .btn:hover { background: var(--accent-dark); }
+    .btn.secondary { background: #e8eef9; color: var(--accent-dark); }
     .page { margin-top: 28px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; box-shadow: var(--shadow); }
     .page h2 { margin: 0 0 6px; font-size: 16px; }
     .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 99px; margin-left: 8px; }
@@ -76,28 +79,36 @@
     figure { margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
     figure img { width: 100%; height: 160px; object-fit: contain; background: #f7f5f0; display: block; }
     figcaption { padding: 8px 10px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+    th { font-size: 12px; color: var(--muted); font-weight: 600; }
+    .totals { margin-top: 12px; text-align: right; font-size: 14px; }
+    .totals strong { font-size: 18px; }
+    .money { font-variant-numeric: tabular-nums; }
   </style>
 </head>
 <body>
   <header>
     <div>
-      <h1>Dual-Pathway Drawing Split</h1>
-      <p>Upload a construction PDF — extract legends, crop wings, and export zoom tiles.</p>
+      <h1>Drawing Split · Symbol Count · Cost</h1>
+      <p>PDF → symbol legend → wing ROI zooms → YOLO detect → pricing invoice</p>
     </div>
-    <div class="model" id="health">Checking model…</div>
+    <div class="model" id="health">Checking…</div>
   </header>
   <main>
     <label class="drop" id="drop">
-      <strong>Drop a PDF or drawing image</strong>
-      <span>Output: wing crops + 588px zooms in 04_wings/{WING-NAME}/</span>
+      <strong>Drop a construction PDF</strong>
+      <span>End-to-end: extract legend, zoom tiles, detect symbols, build cost invoice</span>
       <input id="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" />
     </label>
     <div class="status" id="status">
       <div id="statusTitle">Queued</div>
       <div class="bar" id="bar"><i></i></div>
+      <div class="eta" id="statusEta"></div>
       <div class="meta" id="statusMeta"></div>
       <div class="actions" id="actions"></div>
     </div>
+    <div id="invoiceBox"></div>
     <div id="results"></div>
   </main>
   <script>
@@ -106,15 +117,20 @@
     const statusEl = document.getElementById("status");
     const statusTitle = document.getElementById("statusTitle");
     const statusMeta = document.getElementById("statusMeta");
+    const statusEta = document.getElementById("statusEta");
     const bar = document.getElementById("bar");
     const actions = document.getElementById("actions");
     const results = document.getElementById("results");
+    const invoiceBox = document.getElementById("invoiceBox");
     let pollTimer = null;
 
     fetch("/api/health").then(r => r.json()).then(h => {
       const keyOk = h.runtime === "groq" ? h.groq_key_set : h.token_set;
-      document.getElementById("health").textContent =
-        `${h.runtime} · ${keyOk ? "key set" : "set API key in .env"} · ${h.model}`;
+      const yolo = h.yolo
+        ? `YOLO ready · ${h.yolo_model} · ${(h.yolo_classes || []).length} classes`
+        : "YOLO not ready";
+      document.getElementById("health").innerHTML =
+        `${h.runtime} · ${keyOk ? "vision key set" : "set API key in .env"} · ${h.model}<br/>${yolo}`;
     }).catch(() => { document.getElementById("health").textContent = "API not reachable"; });
 
     drop.addEventListener("click", () => fileInput.click());
@@ -131,17 +147,119 @@
     function figure(src, caption) {
       return `<figure><img src="${src}" alt="${caption}" /><figcaption>${caption}</figcaption></figure>`;
     }
+    function money(n) {
+      const v = Number(n) || 0;
+      return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    function fmtDuration(seconds) {
+      const s = Math.max(0, Math.round(Number(seconds) || 0));
+      if (s < 60) return `${s} sec`;
+      const m = Math.floor(s / 60);
+      if (m < 60) return `${m} min ${s % 60} sec`;
+      return `${Math.floor(m / 60)} hr ${m % 60} min`;
+    }
+
+    async function renderInvoice(job) {
+      invoiceBox.innerHTML = "";
+      if (job.status !== "done") return;
+      let counts = null;
+      let invoice = null;
+      try {
+        counts = await fetch(`/api/jobs/${job.id}/counts`).then(r => r.ok ? r.json() : null);
+      } catch (_) {}
+      try {
+        invoice = await fetch(`/api/jobs/${job.id}/invoice`).then(r => r.ok ? r.json() : null);
+      } catch (_) {}
+      if (!counts && !invoice) {
+        if (job.invoice_grand_total_usd != null) {
+          invoiceBox.innerHTML = `<section class="page"><h2>Cost invoice</h2>
+            <p class="meta">Grand total ${money(job.invoice_grand_total_usd)} · ${job.symbol_count_total || 0} symbols</p>
+          </section>`;
+        }
+        return;
+      }
+      const rows = (counts && counts.rows) || [];
+      const lines = (invoice && invoice.lines) || [];
+      let html = `<section class="page"><h2>Symbol counts &amp; cost invoice</h2>
+        <div><a class="btn" href="/api/jobs/${job.id}/invoice.pdf" target="_blank">Open invoice PDF</a></div>`;
+      if (counts && counts.method === "skipped_legend_mismatch") {
+        html += `<p style="color:var(--warn);font-weight:600;margin:12px 0 4px">${counts.note || "Symbol detection skipped — model does not apply to this drawing set."}</p>`;
+      }
+      html += `<p class="meta">${counts ? (counts.note || "") : ""} · ${rows.length} priced rows · ${counts ? counts.total_count : job.symbol_count_total || 0} units</p>`;
+      if (rows.length) {
+        html += `<table><thead><tr><th>Description</th><th>Detail</th><th>YOLO</th><th>Count</th></tr></thead><tbody>`;
+        for (const r of rows) {
+          html += `<tr><td>${r.description || ""}</td><td class="meta">${r.detail_ref || ""}</td>
+            <td class="meta">${(r.yolo_classes || []).join(", ")}</td><td><strong>${r.count || 0}</strong></td></tr>`;
+        }
+        html += `</tbody></table>`;
+      }
+      const unmatched = (counts && counts.yolo_unmatched) || [];
+      if (unmatched.length) {
+        const unmatchedTotal = unmatched.reduce((sum, u) => sum + (u.count || 0), 0);
+        html += `<h3 style="margin:18px 0 4px;font-size:15px;color:var(--warn)">
+          Detected but NOT matched to legend (${unmatchedTotal} symbols — not priced)</h3>`;
+        html += `<table><thead><tr><th>Detected symbol</th><th>Count</th><th>Why not matched</th></tr></thead><tbody>`;
+        for (const u of unmatched) {
+          html += `<tr><td>${u.class_name || ""}</td><td><strong>${u.count || 0}</strong></td>
+            <td class="meta">${u.reason || ""}</td></tr>`;
+        }
+        html += `</tbody></table>`;
+      }
+      if (lines.length) {
+        html += `<h3 style="margin:18px 0 4px;font-size:15px">Invoice lines</h3>`;
+        html += `<table><thead><tr><th>Device</th><th>Qty</th><th>Unit</th><th>Unit price</th><th>Line total</th></tr></thead><tbody>`;
+        for (const ln of lines) {
+          html += `<tr><td>${ln.description}</td><td>${ln.quantity}</td><td>${ln.unit}</td>
+            <td class="money">${money(ln.unit_price_usd)}</td>
+            <td class="money"><strong>${money(ln.line_total_usd)}</strong></td></tr>`;
+        }
+        html += `</tbody></table>`;
+        html += `<div class="totals">
+          <div>Subtotal <span class="money">${money(invoice.subtotal_usd)}</span></div>
+          <div>Tax <span class="money">${money(invoice.tax_usd)}</span></div>
+          <div><strong>Grand total <span class="money">${money(invoice.grand_total_usd)}</span></strong></div>
+        </div>`;
+      }
+      html += `</section>`;
+      invoiceBox.innerHTML = html;
+    }
 
     function renderJob(job) {
       statusEl.classList.add("show");
       statusTitle.textContent = job.message || job.stage || job.status;
       statusMeta.textContent = `${job.filename || ""} · ${job.status} · ${job.stage || ""}`;
-      bar.classList.remove("done", "fail");
+      const inner = bar.querySelector("i");
+      bar.classList.remove("done", "fail", "live");
+      inner.style.width = "";
       if (job.status === "done") bar.classList.add("done");
       if (job.status === "failed") bar.classList.add("fail");
+      const active = job.status === "queued" || job.status === "processing";
+      if (active && job.progress != null) {
+        bar.classList.add("live");
+        inner.style.width = `${Math.max(3, Math.min(99, job.progress * 100))}%`;
+      }
+      if (active && job.eta_seconds != null) {
+        statusEta.textContent =
+          `Estimated time remaining: ${fmtDuration(job.eta_seconds)}` +
+          (job.estimated_total_seconds != null
+            ? ` (total ~${fmtDuration(job.estimated_total_seconds)})`
+            : "");
+      } else if (job.status === "done" && job.actual_seconds != null) {
+        statusEta.textContent = `Finished in ${fmtDuration(job.actual_seconds)}`;
+      } else {
+        statusEta.textContent = "";
+      }
       actions.innerHTML = job.status === "done"
-        ? `<a class="btn" href="/api/jobs/${job.id}/zip">Download zip</a>`
+        ? `<button class="btn" onclick="document.getElementById('invoiceBox').scrollIntoView({behavior:'smooth'})">Show invoice</button>
+           <a class="btn" href="/api/jobs/${job.id}/invoice.pdf" target="_blank">Invoice PDF</a>
+           <a class="btn secondary" href="/api/jobs/${job.id}/invoice.csv">Invoice CSV</a>
+           <a class="btn secondary" href="/api/jobs/${job.id}/zip">Download zip</a>
+           <a class="btn secondary" href="/api/jobs/${job.id}/counts">Counts JSON</a>`
         : "";
+
+      if (job.status === "done") renderInvoice(job);
+      else invoiceBox.innerHTML = "";
 
       if (!job.pages || !job.pages.length) { results.innerHTML = ""; return; }
       results.innerHTML = job.pages.map(page => {
@@ -188,6 +306,7 @@
       statusTitle.textContent = "Uploading…";
       statusMeta.textContent = file.name;
       results.innerHTML = "";
+      invoiceBox.innerHTML = "";
       const data = new FormData();
       data.append("file", file);
       const res = await fetch("/api/jobs", { method: "POST", body: data });

@@ -1,0 +1,11 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.9
+python-dotenv>=1.0.1
+pillow>=10.4.0
+PyMuPDF>=1.24.9
+opencv-python-headless>=4.10.0
+numpy>=1.26.0
+pytesseract>=0.3.10
+ultralytics>=8.3.0
+torch>=2.0.0

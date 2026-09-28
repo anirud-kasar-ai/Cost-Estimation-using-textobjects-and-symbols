@@ -1,0 +1,2 @@
+Model,Classes,Actual objects,Correctly identified,Object recall,Wrong class,Missed,Total detections,False detections,Object precision,Model precision (best-F1),Model recall (best-F1),mAP@50,mAP@50-95
+Main symbol detector (52 classes),52,1061,1032,0.9727,3,26,1392,357,0.7414,0.9001,0.9169,0.9377,0.7192

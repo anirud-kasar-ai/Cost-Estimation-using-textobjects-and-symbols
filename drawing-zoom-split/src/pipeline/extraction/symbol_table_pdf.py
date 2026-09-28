@@ -77,7 +77,7 @@ def generate_technical_symbol_pdf(
     if not info.entries:
         story.append(
             Paragraph(
-                "No symbol legend, drafting symbols, or abbreviations table was "
+                "No symbol legend or drafting symbols table was "
                 "found in this drawing set.",
                 styles["body"],
             )
@@ -197,10 +197,10 @@ def _technology_entries_table(entries: list[SymbolEntry], styles: dict) -> Table
     table = Table(
         data,
         colWidths=[
-            0.85 * inch,
-            2.35 * inch,
-            1.15 * inch,
-            1.15 * inch,
+            1.0 * inch,
+            2.25 * inch,
+            1.1 * inch,
+            1.1 * inch,
             1.55 * inch,
         ],
         repeatRows=1,
@@ -219,7 +219,7 @@ def _symbol_cell(entry: SymbolEntry, styles: dict):
     try:
         image = Image(io.BytesIO(entry.symbol_image_png))
         # Square-ish legend glyphs — keep them readable, not as tall slivers.
-        max_w, max_h = 0.62 * inch, 0.62 * inch
+        max_w, max_h = 0.78 * inch, 0.78 * inch
         width = float(getattr(image, "imageWidth", 0) or 0)
         height = float(getattr(image, "imageHeight", 0) or 0)
         if width <= 0 or height <= 0:
@@ -274,7 +274,7 @@ def _entries_table(entries: list[SymbolEntry], styles: dict) -> Table:
         )
     table = Table(
         data,
-        colWidths=[1.25 * inch, 3.85 * inch, 2.0 * inch],
+        colWidths=[1.45 * inch, 3.75 * inch, 1.9 * inch],
         repeatRows=1,
     )
     table.setStyle(_table_style())
@@ -295,10 +295,10 @@ def _table_style() -> TableStyle:
             ),
             ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 4),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("LEFTPADDING", (0, 0), (-1, -1), 5),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
             ("ALIGN", (0, 1), (0, -1), "CENTER"),
         ]
     )

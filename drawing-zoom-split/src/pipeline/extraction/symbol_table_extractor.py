@@ -1,8 +1,11 @@
-"""Extract symbol legends, drafting symbols, and abbreviations from bid PDFs.
+"""Extract symbol legends and drafting symbols from bid PDFs.
 
 Scans every page (no CV page cap). Primary input is PyMuPDF embedded text;
 CAD legend layout is often non-tabular, so rows are rebuilt with heuristics
-and (for SYMBOLS / ABBREVIATIONS sheets) with spatial column clustering.
+and (for SYMBOLS sheets) with spatial column clustering.
+
+Abbreviations tables are intentionally excluded — only graphical symbol /
+legend rows belong in the technical-symbol output.
 """
 
 from __future__ import annotations
@@ -244,14 +247,10 @@ def extract_symbol_table_from_pdf(pdf_path: Path) -> SymbolTableInfo:
                 )
             )
 
-            # Architect cover: SYMBOLS (drafting / view) + ABBREVIATIONS.
+            # Architect cover: SYMBOLS (drafting / view). Skip ABBREVIATIONS.
             if _page_has_symbols_section(text):
                 page_entries.extend(
                     _parse_symbols_section(spans, page_number, page=page)
-                )
-            if _page_has_abbreviations_section(text):
-                page_entries.extend(
-                    _parse_abbreviations_section(spans, page_number)
                 )
 
             # Architect plan/ceiling legends (glyph left of description).
@@ -270,7 +269,7 @@ def extract_symbol_table_from_pdf(pdf_path: Path) -> SymbolTableInfo:
     info.legend_pages = sorted(set(info.legend_pages))
     if not info.entries:
         info.notes.append(
-            "No symbol legend, drafting symbols, or abbreviations table was found."
+            "No symbol legend or drafting symbols table was found."
         )
     return info
 
@@ -282,8 +281,6 @@ def _page_has_legend(text: str) -> bool:
     if re.search(r"\bSYMBOL\s+LEGEND\b", upper):
         return True
     if _page_has_symbols_section(text):
-        return True
-    if _page_has_abbreviations_section(text):
         return True
     if _page_has_plan_legend(text):
         return True
@@ -312,19 +309,6 @@ def _page_has_symbols_section(text: str) -> bool:
         if "SYMBOLS" not in upper:
             return False
     return "DRAFTING ITEMS" in upper or "VIEW REFERENCES" in upper
-
-
-def _page_has_abbreviations_section(text: str) -> bool:
-    # Require a standalone heading — not a buried sheet-index word.
-    if not re.search(r"(?m)^\s*ABBREVIATIONS\s*$", text):
-        return False
-    upper = text.upper()
-    hits = sum(
-        1
-        for token in ("AFF", "CMU", "NTS", "CONC", "BLDG", "NIC", "ABOVE FINISH")
-        if token in upper
-    )
-    return hits >= 2
 
 
 def _clean(line: str) -> str:
@@ -443,22 +427,22 @@ def _parse_symbols_section(
         _attach_description_left_glyphs(
             page,
             drafting_entries,
-            glyph_width=120.0,
-            x_gap=2.0,
-            x_left_floor=148.0,
+            glyph_width=130.0,
+            x_gap=3.0,
+            x_left_floor=145.0,
             y_ceiling=drafting_ceiling,
-            vertical_half_span=52.0,
+            vertical_half_span=68.0,
             isolate_bands=True,
             matchline_above=True,
         )
         _attach_description_left_glyphs(
             page,
             view_entries,
-            glyph_width=150.0,
-            x_gap=2.0,
+            glyph_width=160.0,
+            x_gap=3.0,
             x_left_floor=view_floor,
             y_ceiling=view_ceiling,
-            vertical_half_span=55.0,
+            vertical_half_span=72.0,
             isolate_bands=True,
             matchline_above=False,
         )
@@ -540,10 +524,10 @@ def _parse_plan_legend_sections(
         _attach_description_left_glyphs(
             page,
             entries[start:],
-            glyph_width=140.0,
+            glyph_width=150.0,
             x_gap=4.0,
-            x_left_floor=heading.x0 - 8,
-            vertical_half_span=28.0,
+            x_left_floor=heading.x0 - 10,
+            vertical_half_span=40.0,
             isolate_bands=True,
         )
     return entries
@@ -733,25 +717,24 @@ def _attach_description_left_glyphs(
         desc_mid = (rect.y0 + rect.y1) / 2.0
         y_lo = desc_mid - vertical_half_span
         y_hi = desc_mid + vertical_half_span
-        # Soft clamp to neighbors — tiny overlap by default; allow more room when
-        # the previous row is far away (tall glyphs like north arrow need it).
+        # Soft clamp to neighbors — allow room for tall diamonds / elevation marks.
         if pos > 0:
             prev = anchors[pos - 1][1]
             mid_lo = (prev.y1 + rect.y0) / 2.0
             gap_to_prev = max(0.0, rect.y0 - prev.y1)
-            slack = 3.0 if gap_to_prev < 45 else min(18.0, gap_to_prev * 0.28)
+            slack = 6.0 if gap_to_prev < 45 else min(24.0, gap_to_prev * 0.35)
             y_lo = max(y_lo, mid_lo - slack)
         else:
             # First row: do not swallow the column header (DRAFTING ITEMS / VIEW…).
-            y_lo = max(y_lo, rect.y0 - 36.0)
+            y_lo = max(y_lo, rect.y0 - 48.0)
         if pos + 1 < len(anchors):
             nxt = anchors[pos + 1][1]
             mid_hi = (rect.y1 + nxt.y0) / 2.0
             gap_to_next = max(0.0, nxt.y0 - rect.y1)
-            slack = 3.0 if gap_to_next < 45 else min(18.0, gap_to_next * 0.28)
+            slack = 6.0 if gap_to_next < 45 else min(24.0, gap_to_next * 0.35)
             y_hi = min(y_hi, mid_hi + slack)
-        y_lo = min(y_lo, rect.y0 - 4.0)
-        y_hi = max(y_hi, rect.y1 + 4.0)
+        y_lo = min(y_lo, rect.y0 - 8.0)
+        y_hi = max(y_hi, rect.y1 + 8.0)
         if y_ceiling is not None:
             y_lo = max(y_lo, y_ceiling)
 
@@ -759,7 +742,9 @@ def _attach_description_left_glyphs(
         x_left = x_right - glyph_width
         if x_left_floor is not None:
             x_left = max(x_left, x_left_floor)
-        clip = fitz.Rect(x_left, y_lo, x_right, y_hi) & page.rect
+        # Outer pad for diamond tips; keep x_right short of the description text.
+        clip = fitz.Rect(x_left - 2.0, y_lo - 5.0, x_right, y_hi + 5.0)
+        clip = clip & page.rect
         if clip.is_empty or clip.width < 4 or clip.height < 3:
             continue
         prefer = 0.5
@@ -771,6 +756,7 @@ def _attach_description_left_glyphs(
             clip,
             isolate_bands=isolate_bands,
             prefer_y_frac=prefer,
+            prefer_x_frac=0.62,
         )
         if png:
             entries[index].symbol_image_png = png
@@ -782,6 +768,7 @@ def _pixmap_to_symbol_png(
     *,
     isolate_bands: bool,
     prefer_y_frac: float,
+    prefer_x_frac: float = 0.55,
 ) -> bytes | None:
     try:
         pix = page.get_pixmap(
@@ -796,18 +783,31 @@ def _pixmap_to_symbol_png(
     except Exception:  # noqa: BLE001
         return _trim_pixmap_png(
             pix,
-            margin=12,
+            margin=18,
             strip_grid=False,
             erase_separated_rules=True,
         )
     img = _erase_separated_edge_rules(img)
     if isolate_bands:
         img = _isolate_primary_ink_band(img, prefer_y_frac=prefer_y_frac)
+        img = _isolate_primary_ink_component(
+            img,
+            prefer_x_frac=prefer_x_frac,
+            prefer_y_frac=prefer_y_frac,
+        )
+    else:
+        img = _erase_edge_specks(img)
+        img = _isolate_primary_ink_component(
+            img,
+            prefer_x_frac=prefer_x_frac,
+            prefer_y_frac=prefer_y_frac,
+        )
     bbox = _ink_bbox(img)
     if bbox is None:
         return None
     left, top, right, bottom = bbox
-    margin = 12
+    # Generous margin so diamond tips / box sides are never flush with the edge.
+    margin = 20
     left = max(0, left - margin)
     top = max(0, top - margin)
     right = min(img.width, right + margin)
@@ -815,10 +815,86 @@ def _pixmap_to_symbol_png(
     cropped = img.crop((left, top, right, bottom))
     if cropped.width < 3 or cropped.height < 3:
         return None
-    png = _png_bytes(_pad_symbol_cell(cropped, min_w=120, min_h=72))
+    png = _png_bytes(_pad_symbol_cell(cropped, min_w=140, min_h=96))
     if png and not _png_is_thin_vertical_rule(png):
         return png
     return None
+
+
+def _isolate_primary_ink_component(
+    img: PILImage.Image,
+    *,
+    prefer_x_frac: float = 0.55,
+    prefer_y_frac: float = 0.5,
+) -> PILImage.Image:
+    """Keep the main glyph blob; drop distant neighbor-row / description crumbs."""
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return img
+
+    width, height = img.width, img.height
+    if width < 12 or height < 12:
+        return img
+
+    arr = np.array(img.convert("RGB"))
+    gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+    ink = (gray < 245).astype("uint8") * 255
+    n_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        ink, connectivity=8
+    )
+    if n_labels <= 2:
+        return img
+
+    prefer_x = prefer_x_frac * max(width - 1, 1)
+    prefer_y = prefer_y_frac * max(height - 1, 1)
+    min_area = max(12, int(width * height * 0.0008))
+
+    candidates: list[tuple[float, int]] = []
+    for label in range(1, n_labels):
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        if area < min_area:
+            continue
+        cx, cy = centroids[label]
+        score = abs(cx - prefer_x) + abs(cy - prefer_y) * 1.15 - 0.02 * area
+        candidates.append((score, label))
+    if not candidates:
+        return img
+
+    candidates.sort()
+    primary = candidates[0][1]
+    px = int(stats[primary, cv2.CC_STAT_LEFT])
+    py = int(stats[primary, cv2.CC_STAT_TOP])
+    pw = int(stats[primary, cv2.CC_STAT_WIDTH])
+    ph = int(stats[primary, cv2.CC_STAT_HEIGHT])
+    primary_box = (px - 18, py - 18, px + pw + 18, py + ph + 18)
+
+    keep = {primary}
+    for _, label in candidates[1:]:
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        w = int(stats[label, cv2.CC_STAT_WIDTH])
+        h = int(stats[label, cv2.CC_STAT_HEIGHT])
+        if (
+            x <= primary_box[2]
+            and x + w >= primary_box[0]
+            and y <= primary_box[3]
+            and y + h >= primary_box[1]
+        ):
+            keep.add(label)
+            continue
+        cx, cy = centroids[label]
+        if (
+            primary_box[0] - 28 <= cx <= primary_box[2] + 28
+            and primary_box[1] - 28 <= cy <= primary_box[3] + 28
+        ):
+            keep.add(label)
+
+    mask = np.isin(labels, list(keep))
+    out = arr.copy()
+    out[~mask] = (255, 255, 255)
+    return PILImage.fromarray(out)
 
 
 def _isolate_primary_ink_band(
@@ -910,7 +986,7 @@ def _isolate_primary_ink_band(
                 primary_h = bot - top + 1
                 changed = True
 
-    pad = 16
+    pad = 24
     top = max(0, top - pad)
     bot = min(height, bot + pad + 1)
     if bot - top < 6:
@@ -1010,158 +1086,6 @@ def _merge_label_runs(spans: list[_TextSpan]) -> list[str]:
             continue
         cleaned.append(re.sub(r"\s+", " ", label).strip(" ,"))
     return cleaned
-
-
-def _parse_abbreviations_section(
-    spans: list[_TextSpan], page_number: int
-) -> list[SymbolEntry]:
-    """Parse two-column ABBREVIATIONS lists (abbr | definition)."""
-    abbrev_y = _find_heading_y(spans, ABBREVIATIONS_HEADING_RE)
-    if abbrev_y is None:
-        return []
-
-    # Stay in the left legend band; project notes sit further right (~675+).
-    band = [
-        s
-        for s in spans
-        if s.y0 > abbrev_y + 5 and s.x0 < 620
-    ]
-    if len(band) < 8:
-        return []
-
-    # Cluster into left and right abbreviation pairs by x.
-    left_abbr_x = 190.0
-    mid_x = 360.0
-    entries: list[SymbolEntry] = []
-    entries.extend(
-        _pair_abbreviation_column(
-            [s for s in band if s.x0 < mid_x],
-            abbr_max_x=left_abbr_x,
-            page_number=page_number,
-        )
-    )
-    entries.extend(
-        _pair_abbreviation_column(
-            [s for s in band if s.x0 >= mid_x],
-            abbr_max_x=mid_x + 70,
-            page_number=page_number,
-        )
-    )
-    # Reject weak / mis-detected sheets (notes mistaken for abbr columns).
-    solid = [e for e in entries if e.symbol and e.symbol != "—"]
-    if len(solid) < 12:
-        return []
-    return entries
-
-
-def _pair_abbreviation_column(
-    spans: list[_TextSpan],
-    *,
-    abbr_max_x: float,
-    page_number: int,
-) -> list[SymbolEntry]:
-    """Within one pair-column, match abbr (left) to definition (right) by Y."""
-    if not spans:
-        return []
-
-    abbrs = [s for s in spans if s.x0 < abbr_max_x]
-    defs = [s for s in spans if s.x0 >= abbr_max_x]
-    if not defs:
-        return []
-
-    # Bucket by approximate row Y.
-    rows: dict[int, dict[str, list[str]]] = {}
-    for span in abbrs:
-        key = int(round(span.y0 / 5.0) * 5)
-        rows.setdefault(key, {"abbr": [], "def": []})
-        rows[key]["abbr"].append(span.text)
-    for span in defs:
-        key = int(round(span.y0 / 5.0) * 5)
-        # Snap to nearest existing row within 8pt if abbr already placed.
-        nearest = min(rows.keys(), key=lambda y: abs(y - key), default=None)
-        if nearest is not None and abs(nearest - key) <= 8:
-            key = nearest
-        rows.setdefault(key, {"abbr": [], "def": []})
-        rows[key]["def"].append(span.text)
-
-    entries: list[SymbolEntry] = []
-    for key in sorted(rows):
-        abbr = _clean(" ".join(rows[key]["abbr"]))
-        definition = _clean(" ".join(rows[key]["def"]))
-        if not definition:
-            continue
-        # Symbol-only rows (⊥, ∠) may have empty abbr in the text layer.
-        if not abbr:
-            abbr = "—"
-        if _is_bad_abbreviation_pair(abbr, definition):
-            continue
-        entries.append(
-            SymbolEntry(
-                symbol=abbr,
-                description=definition,
-                source_page=page_number,
-                legend_title="ABBREVIATIONS",
-            )
-        )
-    return entries
-
-
-_ABBR_TOKEN_RE = re.compile(
-    r"^[@#]|[A-Za-z0-9./()#&-]{1,14}$"
-)
-
-
-def _is_bad_abbreviation_pair(abbr: str, definition: str) -> bool:
-    upper_def = definition.upper()
-    upper_abbr = abbr.upper()
-    if upper_def.startswith("GENERAL PROJECT"):
-        return True
-    if len(definition) < 2:
-        return True
-    if ABBREVIATIONS_HEADING_RE.match(abbr) or ABBREVIATIONS_HEADING_RE.match(
-        definition
-    ):
-        return True
-    # Sheet-index / title-block / note bleed.
-    if len(definition) > 55:
-        return True
-    if definition.count(".") >= 1 and len(definition) > 35:
-        return True
-    if len(abbr) > 14:
-        return True
-    if abbr != "—" and not _ABBR_TOKEN_RE.match(abbr):
-        return True
-    # Glyph-only rows: keep short dictionary words, drop note paragraphs.
-    if abbr == "—":
-        if len(definition) > 28 or definition.count(" ") > 3:
-            return True
-        if re.search(r"\d", definition):
-            return True
-        if upper_def in {"DRAWING INDEX", "PLUMBING", "MECHANICAL &"}:
-            return True
-    if any(
-        token in upper_abbr
-        for token in ("PLAN", "SCHEDULE", "DATE", "DRAWN", "SHEET", "TITLE")
-    ):
-        return True
-    if any(
-        token in upper_def
-        for token in (
-            "DISCLAIMS",
-            "GENERAL INFORMATION",
-            "FIRE ALARM",
-            "LIGHTING PLAN",
-            "PROJECT OWNER",
-            "CONTRACTOR SHALL",
-            "STRUCTURAL DRAWING",
-            "SHEET TITLE",
-            "MEANS, METHODS",
-        )
-    ):
-        return True
-    if re.search(r"\b\d[A-Z]\d{2,4}\b", upper_abbr):
-        return True
-    return False
 
 
 _TECH_HEADER_RE = re.compile(
@@ -1325,9 +1249,24 @@ def _apply_grouped_legend_symbols(
         if "DATA LOCATION" in desc and "CEILING" in desc:
             is_group = True
             j = index + 1
-            while j < len(entries) and j < index + 3:
+            while j < len(entries) and j < index + 4:
                 nxt = (entries[j].description or "").upper()
                 if "WIRELESS ACCESS POINT" in nxt or nxt.startswith("MOUNT"):
+                    span = j - index + 1
+                    j += 1
+                    continue
+                break
+        elif "DATA DROP" in desc and "EXTERIOR" in desc and "WIRELESS" in desc:
+            # CAT6A … EXTERIOR WAP + EXTERIOR WAP + MOUNT share one tall cell.
+            is_group = True
+            j = index + 1
+            while j < len(entries) and j < index + 4:
+                nxt = (entries[j].description or "").upper()
+                if (
+                    "WIRELESS ACCESS POINT" in nxt
+                    or nxt.startswith("MOUNT")
+                    or nxt == "MOUNT"
+                ):
                     span = j - index + 1
                     j += 1
                     continue
@@ -1335,8 +1274,9 @@ def _apply_grouped_legend_symbols(
         elif "WIRELESS ACCESS POINT" in desc:
             is_group = True
             j = index + 1
-            while j < len(entries) and j < index + 2:
-                if (entries[j].description or "").upper().startswith("MOUNT"):
+            while j < len(entries) and j < index + 3:
+                nxt = (entries[j].description or "").upper()
+                if nxt.startswith("MOUNT") or nxt == "MOUNT":
                     span = j - index + 1
                     j += 1
                     continue
@@ -1344,7 +1284,7 @@ def _apply_grouped_legend_symbols(
         elif "DATA DROP" in desc and "CAMERA" in desc:
             is_group = True
             j = index + 1
-            while j < len(entries) and j < index + 3:
+            while j < len(entries) and j < index + 4:
                 nxt = (entries[j].description or "").upper()
                 if (
                     nxt.startswith("NETWORK CAMERA")
@@ -1429,13 +1369,18 @@ def _crop_tech_symbol_cell(
     """
     del visual_cols
     sym_lo, sym_hi = bands["symbol"]
-    # Slight inset from row/column midlines to reduce table-rule bleed.
-    pad = 3.0
+    desc_lo, _desc_hi = bands["description"]
+    # Keep packing bands unchanged, but let the *crop* reach into the gutter
+    # before description text so tags like WP (right of the mark) and circle
+    # ticks are not clipped. desc_visual_left still stops description words.
+    crop_lo = sym_lo - 8.0
+    crop_hi = min(sym_hi + 48.0, desc_lo + 28.0)
+    pad = 1.0
     text_rect = fitz.Rect(
         min(row_x_left, row_x_right) + pad,
-        sym_lo - 1,
+        crop_lo,
         max(row_x_left, row_x_right) - pad,
-        sym_hi + 3,
+        crop_hi,
     )
     visual = _text_to_visual_rect(page, text_rect)
     visual = fitz.Rect(
@@ -1446,24 +1391,39 @@ def _crop_tech_symbol_cell(
     )
     # Stop before description text so we don't pull "DA…" / "GR…" into the crop.
     if desc_visual_left is not None and desc_visual_left > visual.x0 + 8:
-        visual.x1 = min(visual.x1, desc_visual_left - 3)
+        visual.x1 = min(visual.x1, desc_visual_left - 1.5)
+    # Small outer pad so circle strokes / triangle tips survive the clip.
+    visual = fitz.Rect(
+        visual.x0 - 2.0,
+        visual.y0 - 2.0,
+        visual.x1 + 2.0,
+        visual.y1 + 2.0,
+    )
     visual = visual & page.rect
     if visual.is_empty or visual.width < 4 or visual.height < 4:
         return None
     try:
         pix = page.get_pixmap(
-            matrix=fitz.Matrix(3.5, 3.5), clip=visual, alpha=False
+            matrix=fitz.Matrix(4.0, 4.0), clip=visual, alpha=False
         )
     except Exception:  # noqa: BLE001
         return None
     if pix.width < 4 or pix.height < 4 or _pixmap_mostly_blank(pix):
         return None
-    return _trim_pixmap_png(pix)
+    # Do not strip box/circle sides as table grid — only drop distant rules.
+    return _finalize_tech_glyph_png(
+        _trim_pixmap_png(
+            pix,
+            margin=22,
+            strip_grid=False,
+            erase_separated_rules=True,
+        )
+    )
 
 
 def _trim_pixmap_png(
     pix: fitz.Pixmap,
-    margin: int = 10,
+    margin: int = 16,
     *,
     strip_grid: bool = True,
     erase_separated_rules: bool = False,
@@ -1491,7 +1451,35 @@ def _trim_pixmap_png(
     cropped = img.crop((left, top, right, bottom))
     if cropped.width < 3 or cropped.height < 3:
         return None
-    return _png_bytes(_pad_symbol_cell(cropped, min_w=120, min_h=72))
+    return _png_bytes(_pad_symbol_cell(cropped, min_w=140, min_h=96))
+
+
+def _finalize_tech_glyph_png(png: bytes | None) -> bytes | None:
+    """Tighten a technology-legend crop: drop border ticks, keep the device blob."""
+    if not png:
+        return None
+    try:
+        img = PILImage.open(io.BytesIO(png)).convert("RGB")
+    except Exception:  # noqa: BLE001
+        return png
+    img = _erase_edge_specks(img)
+    img = _isolate_primary_ink_component(img, prefer_x_frac=0.45, prefer_y_frac=0.5)
+    bbox = _ink_bbox(img)
+    if bbox is None:
+        return None
+    left, top, right, bottom = bbox
+    margin = 18
+    left = max(0, left - margin)
+    top = max(0, top - margin)
+    right = min(img.width, right + margin)
+    bottom = min(img.height, bottom + margin)
+    cropped = img.crop((left, top, right, bottom))
+    if cropped.width < 3 or cropped.height < 3:
+        return None
+    out = _png_bytes(_pad_symbol_cell(cropped, min_w=140, min_h=96))
+    if out and not _png_is_thin_vertical_rule(out):
+        return out
+    return None
 
 
 def _ink_bbox(img: PILImage.Image) -> tuple[int, int, int, int] | None:
@@ -1501,11 +1489,15 @@ def _ink_bbox(img: PILImage.Image) -> tuple[int, int, int, int] | None:
 
 
 def _pad_symbol_cell(
-    img: PILImage.Image, *, min_w: int, min_h: int
+    img: PILImage.Image, *, min_w: int, min_h: int, border: int = 8
 ) -> PILImage.Image:
-    """Center the glyph on a white cell so the PDF Symbol column stays roomy."""
-    width = max(img.width, min_w)
-    height = max(img.height, min_h)
+    """Center the glyph on a white cell so the PDF Symbol column stays roomy.
+
+    Always add ``border`` so diamond tips never sit flush against the cell edge
+    when the source clip was already ink-tight.
+    """
+    width = max(img.width + 2 * border, min_w)
+    height = max(img.height + 2 * border, min_h)
     if width == img.width and height == img.height:
         return img
     canvas = PILImage.new("RGB", (width, height), (255, 255, 255))
@@ -1516,7 +1508,7 @@ def _pad_symbol_cell(
 
 
 def _erase_separated_edge_rules(img: PILImage.Image) -> PILImage.Image:
-    """Drop thin full-height column rules that sit apart from the main glyph.
+    """Drop thin full-height/width table rules that sit apart from the main glyph.
 
     Numbered legends often place a table border left of the CAD symbol with a
     white gap between them. Erase only those isolated rules — never a box side
@@ -1540,9 +1532,26 @@ def _erase_separated_edge_rules(img: PILImage.Image) -> PILImage.Image:
             / height
         )
 
+    def _row_frac(y: int) -> float:
+        return (
+            sum(
+                1
+                for x in range(width)
+                if pixels[x, y][0] < 245
+                and pixels[x, y][1] < 245
+                and pixels[x, y][2] < 245
+            )
+            / width
+        )
+
     def _paint_white_band(x0: int, x1: int) -> None:
         for y in range(height):
             for x in range(max(0, x0), min(width, x1)):
+                pixels[x, y] = (255, 255, 255)
+
+    def _paint_white_rows(y0: int, y1: int) -> None:
+        for y in range(max(0, y0), min(height, y1)):
+            for x in range(width):
                 pixels[x, y] = (255, 255, 255)
 
     def _gap_before_next_ink(start: int) -> int:
@@ -1559,6 +1568,22 @@ def _erase_separated_edge_rules(img: PILImage.Image) -> PILImage.Image:
         while x >= 0 and _col_frac(x) < 0.12:
             gap += 1
             x -= 1
+        return gap
+
+    def _gap_below_next_ink(start: int) -> int:
+        gap = 0
+        y = start
+        while y < height and _row_frac(y) < 0.12:
+            gap += 1
+            y += 1
+        return gap
+
+    def _gap_above_prev_ink(start: int) -> int:
+        gap = 0
+        y = start
+        while y >= 0 and _row_frac(y) < 0.12:
+            gap += 1
+            y -= 1
         return gap
 
     x = 0
@@ -1579,7 +1604,85 @@ def _erase_separated_edge_rules(img: PILImage.Image) -> PILImage.Image:
             elif right_edge and _gap_after_prev_ink(x - 1) >= 6:
                 _paint_white_band(x, x1 + 1)
         x = x1 + 1
-    return img
+
+    # Same idea for horizontal table borders under/above a multi-row glyph cell.
+    y = 0
+    while y < height:
+        if _row_frac(y) < 0.75:
+            y += 1
+            continue
+        y1 = y
+        while y1 + 1 < height and _row_frac(y1 + 1) >= 0.75:
+            y1 += 1
+        run_h = y1 - y + 1
+        if run_h <= 5:
+            top_edge = y <= max(4, int(height * 0.30))
+            bot_edge = y1 >= height - max(4, int(height * 0.30)) - 1
+            if top_edge and _gap_below_next_ink(y1 + 1) >= 8:
+                _paint_white_rows(y, y1 + 1)
+            elif bot_edge and _gap_above_prev_ink(y - 1) >= 8:
+                _paint_white_rows(y, y1 + 1)
+        y = y1 + 1
+
+    # Short table-border ticks (not full-height) still leak into symbol cells.
+    return _erase_edge_specks(img)
+
+
+def _erase_edge_specks(img: PILImage.Image) -> PILImage.Image:
+    """Drop tiny disconnected ink crumbs hugging the crop border."""
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return img
+
+    width, height = img.width, img.height
+    if width < 20 or height < 20:
+        return img
+
+    arr = np.array(img.convert("RGB"))
+    gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
+    ink = (gray < 245).astype("uint8") * 255
+    n_labels, labels, stats, _centroids = cv2.connectedComponentsWithStats(
+        ink, connectivity=8
+    )
+    if n_labels <= 2:
+        return img
+
+    areas = [int(stats[i, cv2.CC_STAT_AREA]) for i in range(1, n_labels)]
+    if not areas:
+        return img
+    main_area = max(areas)
+    edge_x = max(3, int(width * 0.08))
+    edge_y = max(3, int(height * 0.08))
+    max_speck = max(18, int(main_area * 0.04))
+
+    drop: set[int] = set()
+    for label in range(1, n_labels):
+        area = int(stats[label, cv2.CC_STAT_AREA])
+        if area > max_speck:
+            continue
+        x = int(stats[label, cv2.CC_STAT_LEFT])
+        y = int(stats[label, cv2.CC_STAT_TOP])
+        w = int(stats[label, cv2.CC_STAT_WIDTH])
+        h = int(stats[label, cv2.CC_STAT_HEIGHT])
+        touches_edge = (
+            x <= edge_x
+            or y <= edge_y
+            or x + w >= width - edge_x
+            or y + h >= height - edge_y
+        )
+        # Thin ticks / leader crumbs only — keep small filled triangles.
+        thin = w <= 6 or h <= 6 or (w * h) > area * 4
+        if touches_edge and thin:
+            drop.add(label)
+
+    if not drop:
+        return img
+    mask = np.isin(labels, list(drop))
+    out = arr.copy()
+    out[mask] = (255, 255, 255)
+    return PILImage.fromarray(out)
 
 
 def _strip_table_grid_lines(img: PILImage.Image) -> PILImage.Image:
@@ -1652,12 +1755,25 @@ def _crop_grouped_symbol(
     xs = [e.row_x for e in group if e.row_x is not None]
     if not xs:
         return None
+    # Prefer the top row's description edge (same column for the whole stack).
+    desc_visual_left = None
+    needle = (group[0].description or "").split(",")[0].strip()
+    if len(needle) >= 4:
+        hits = page.search_for(needle[:48])
+        if hits:
+            lefts = []
+            for hit in hits:
+                visual = _text_to_visual_rect(page, hit)
+                lefts.append(min(visual.x0, visual.x1))
+            if lefts:
+                desc_visual_left = min(lefts)
     return _crop_tech_symbol_cell(
         page,
-        row_x_left=min(xs) - 10,
-        row_x_right=max(xs) + 10,
+        row_x_left=min(xs) - 16,
+        row_x_right=max(xs) + 16,
         bands=bands,
         visual_cols=visual_cols or {},
+        desc_visual_left=desc_visual_left,
     )
 
 
@@ -1715,6 +1831,7 @@ def _tech_column_bands(headers: dict[str, float]) -> dict[str, tuple[float, floa
     # Description text (~1307) sits between SYMBOL header (~1248) and
     # DESCRIPTION header (~1379); glyph art sits in the SYMBOL strip.
     # Keep symbol band clear of DESCRIPTION text (~1307 on Architect-CD sheets).
+    # Do NOT expand this into the description zone — that breaks row parsing.
     symbol_hi = min(sym + 48, desc - 70)
     return {
         "symbol": (sym - 30, symbol_hi),
@@ -2417,6 +2534,16 @@ def _parse_legend_page(
                 )
             if not numbered:
                 numbered = _parse_numbered_legend(trimmed, page_number, title)
+                numbered = [
+                    e
+                    for e in numbered
+                    if e.description
+                    and not _CODE_NOTE_RE.search(e.description)
+                    and (
+                        _LEGEND_DESC_HINT_RE.search(e.description)
+                        or EQUIPMENT_HINT_RE.search(e.description)
+                    )
+                ]
                 if page is not None:
                     _attach_numbered_legend_glyphs(
                         page,
@@ -2426,9 +2553,39 @@ def _parse_legend_page(
                     )
             entries.extend(numbered)
         else:
-            entries.extend(
-                _parse_technology_legend(trimmed, page_number, title)
-            )
+            tech = _parse_technology_legend(trimmed, page_number, title)
+            if page is not None and tech:
+                # Upright TECHNOLOGY SYMBOL LEGEND (rotation 0): crop glyphs
+                # sitting left of each description when spatial parse missed.
+                for entry in tech:
+                    if entry.row_x is not None:
+                        continue
+                    needle = (entry.description or "").split(",")[0].strip()
+                    if len(needle) < 4:
+                        needle = (entry.description or "")[:40]
+                    hits = page.search_for(needle[:48]) if needle else []
+                    if not hits:
+                        continue
+                    # Prefer the leftmost description column hit (legend body).
+                    best = min(hits, key=lambda r: (r.x0, r.y0))
+                    entry.row_x = float(best.x0)
+                _attach_description_left_glyphs(
+                    page,
+                    tech,
+                    glyph_width=150.0,
+                    x_gap=4.0,
+                    vertical_half_span=22.0,
+                    isolate_bands=True,
+                )
+                for entry in tech:
+                    if entry.symbol_image_png:
+                        continue
+                    entry.symbol_image_png = _render_legend_symbol(
+                        entry.symbol,
+                        entry.description or "",
+                        part_number=entry.part_number,
+                    )
+            entries.extend(tech)
     return entries
 
 
@@ -2436,6 +2593,14 @@ _NUMBER_LABEL_RE = re.compile(r"^(\d+)\.$")
 _SCOPE_VERB_RE = re.compile(
     r"^(REMOVE|INSTALL|PERFORM|CLEAN|TEST|NAIL|RAISE|MECHANICALLY|"
     r"APPLY|ENSURE|ALL\s+DRAINS|ON\s+BUILDINGS)\b",
+    re.IGNORECASE,
+)
+# DSA / Title-24 / general-notes lists that sit near a SYMBOL LEGEND heading.
+_CODE_NOTE_RE = re.compile(
+    r"\b(ADDENDA|SECTION\s+4-|TITLE\s+24|DSA\b|VERIFIED\s+REPORTS|"
+    r"CONTINUOUS\s+INSPECTION|TESTING\s+LABORATORY|SPECIAL\s+INSPECTION|"
+    r"ADMINISTRATION\s+OF\s+CONSTRUCTION|GOVERNING\s+CODES|"
+    r"START\s+OF\s+CONSTRUCTION|SUPERVISION\s+BY\s+THE\s+DIVISION)\b",
     re.IGNORECASE,
 )
 _LEGEND_DESC_HINT_RE = re.compile(
@@ -2716,6 +2881,8 @@ def _parse_numbered_legend_spatial(
             desc = _description_from_words(page, span, x_right_limit=x_right_limit)
         if not desc:
             continue
+        if _CODE_NOTE_RE.search(desc):
+            continue
         if _SCOPE_VERB_RE.match(desc) and not _LEGEND_DESC_HINT_RE.search(desc):
             continue
         # Drop title-block bleed (company / agent strip to the right of the legend).
@@ -2732,6 +2899,14 @@ def _parse_numbered_legend_spatial(
             )[0].strip(" ,;-")
             if not desc or not _LEGEND_DESC_HINT_RE.search(desc):
                 continue
+        # Mechanical / DSA sheets label "SYMBOL LEGEND" but the numbered column
+        # is often general notes — keep only drafting/equipment glyph rows.
+        if not (
+            _LEGEND_DESC_HINT_RE.search(desc)
+            or EQUIPMENT_HINT_RE.search(desc)
+            or SHORT_TAG_RE.match(desc)
+        ):
+            continue
         entries.append(
             SymbolEntry(
                 symbol=str(num),
@@ -2814,19 +2989,19 @@ def _attach_numbered_legend_glyphs(
             continue
         _, num_rect = match
         y_lo, y_hi = row_bounds.get(num, (num_rect.y0 - 1, num_rect.y1 + 1))
-        # Slight vertical pad so top/bottom box strokes are not clipped, but
-        # stay inside the inter-row midline so the next glyph does not bleed in.
-        y_lo -= 0.6
-        y_hi += 0.6
+        # Vertical pad so top/bottom box strokes are not clipped, but stay
+        # inside the inter-row midline so the next glyph does not bleed in.
+        y_lo -= 1.5
+        y_hi += 1.5
         row_h = max(8.0, y_hi - y_lo)
         # Wide enough for hatch/fan/skylight boxes; still stop before the digits.
-        glyph_w = max(28.0, min(52.0, row_h * 2.8))
+        glyph_w = max(36.0, min(64.0, row_h * 3.2))
         clip = fitz.Rect(
             num_rect.x0 - glyph_w,
             y_lo,
             # Keep a hair of gap before the "N." so digit strokes are excluded,
-            # but do not cut the glyph's right wall (was -0.8 → missing sides).
-            num_rect.x0 - 0.15,
+            # but do not cut the glyph's right wall.
+            num_rect.x0 - 0.05,
             y_hi,
         )
         clip = clip & page.rect
@@ -2843,7 +3018,7 @@ def _attach_numbered_legend_glyphs(
         # Do not strip box sides as table grid; only drop distant border rules.
         png = _trim_pixmap_png(
             pix,
-            margin=12,
+            margin=18,
             strip_grid=False,
             erase_separated_rules=True,
         )

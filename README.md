@@ -1,11 +1,12 @@
 # Cost Estimation — Drawing Split & Symbol Count
 
-This repo contains **two standalone tools** plus sample bid drawing PDFs:
+This repo contains **standalone tools** plus sample bid drawing PDFs:
 
 | Path | Role | Setup |
 |------|------|--------|
 | [`dual-pathway-drawing-split/`](dual-pathway-drawing-split/) | PDF → wing crops + 588px zoom tiles (no symbol count) | [SETUP](dual-pathway-drawing-split/SETUP.md) |
-| [`symbol-count-vision/`](symbol-count-vision/) | Count legend symbols on tiles / zoom folders | [SETUP](symbol-count-vision/SETUP.md) |
+| [`symbol-count-vision/`](symbol-count-vision/) | Count technology-legend symbols on tiles / zoom folders (CV + Gemini) | [SETUP](symbol-count-vision/SETUP.md) |
+| [`legend-ocr-count/`](legend-ocr-count/) | Numbered SYMBOL LEGEND + circled callouts via OCR (no YOLO) | [SETUP](legend-ocr-count/SETUP.md) |
 | [`Real data/`](Real%20data/) | Sample bid drawing PDFs (Git LFS) | — |
 
 ## Quick start
@@ -31,6 +32,7 @@ uvicorn app:app --host 127.0.0.1 --port 8767
 
 - Drawing split UI: http://127.0.0.1:8766  
 - Symbol count UI: http://127.0.0.1:8767  
+- Legend OCR callout count UI: http://127.0.0.1:8768  
 
 **Never commit `.env`.** Use each folder’s `.env.example`. API keys and job storage are gitignored.
 
@@ -40,9 +42,10 @@ uvicorn app:app --host 127.0.0.1 --port 8767
 ├── README.md
 ├── SETUP.md
 ├── .gitignore
-├── Real data/              # Sample bid PDFs (Git LFS)
+├── Real data/                   # Sample bid PDFs (Git LFS)
 ├── dual-pathway-drawing-split/  # PDF → wings + zoom tiles (Stage 1; no counting)
-└── symbol-count-vision/    # Legend-gated symbol counting (CV localize, taxonomy classify)
+├── symbol-count-vision/         # Technology-legend symbol counting (CV + Gemini)
+└── legend-ocr-count/            # Numbered legend + circled callout OCR counts
 ```
 
 Sample drawings are in [`Real data/`](Real%20data/) (Git LFS). After clone:

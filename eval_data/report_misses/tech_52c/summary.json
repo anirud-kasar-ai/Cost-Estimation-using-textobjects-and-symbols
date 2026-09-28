@@ -1,0 +1,10 @@
+{
+  "model": "drawing-zoom-split\\model\\symbol_detector_tech.pt",
+  "dataset": "eval_data\\test_project",
+  "split": "test",
+  "gt": 1176,
+  "detected": 1090,
+  "threshold_miss": 31,
+  "tta_only": 11,
+  "undetected": 44
+}

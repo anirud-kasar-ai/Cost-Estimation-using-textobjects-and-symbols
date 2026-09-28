@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import shutil
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -20,6 +21,7 @@ from pipeline.sheet_scan import PageScan, WingHint, _in_title_block, scan_pdf_pa
 from pipeline.roi_zoom import export_wing_roi_and_zooms
 from pipeline.extraction.stages import finalize_sheet_notes, run_extraction_stages
 from pipeline.wing_crop import assign_wing_instance_ids, crop_wings, slugify
+from pipeline.count_stage import COUNTS_DIR, run_symbol_count_stage
 
 logger = logging.getLogger(__name__)
 
@@ -40,11 +42,17 @@ FOLDER_GUIDE = """Dual-pathway drawing split output
 04_wings/     One image per wing, grouped by wing name.
               Folder: B-WING-EAST/     all B-WING-EAST crops in this job
               Name:   page_004.jpg     source page number
+              rois/ + zooms/           ink-tight ROI and overlapping zoom tiles
 05_metadata/  Per-page JSON: wing map, label points, CV pixel boxes.
+06_counts/    YOLO symbol counts + invoice.json / invoice.csv
+symbol_table.json  Extracted symbol legend rows.
 summary.json  Flat index + skipped pages.
-job.json      Job status for the batch runner.
+job.json      Job status for the batch runner / UI.
 
-Reading order: 02_pages -> 03_drawings -> 04_wings -> 05_metadata.
+End-to-end: PDF upload → legend extract → diagram/wing crop → ROI zoom
+→ YOLO symbol detect → pricing CSV → cost invoice.
+
+Reading order: 02_pages -> 03_drawings -> 04_wings -> 05_metadata -> 06_counts.
 """
 
 _INVALID_FOLDER_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]+')
@@ -56,6 +64,42 @@ _WINDOWS_RESERVED = {
     *(f"COM{i}" for i in range(1, 10)),
     *(f"LPT{i}" for i in range(1, 10)),
 }
+
+
+# Rough per-unit costs (seconds) used for the upfront time estimate shown in
+# the UI. They only seed the first guess — once the job is running, the real
+# per-page and per-wing timings observed so far take over.
+EST_PAGE_SEC = 12.0        # LLM classify + wing map + CV crop, per page
+EST_WING_COUNT_SEC = 20.0  # YOLO across one wing's zoom tiles
+EST_WINGS_PER_PAGE = 1.6   # typical wings per page until the pages tell us
+
+
+def _pdf_page_count(path: Path) -> int | None:
+    if path.suffix.lower() != ".pdf":
+        return 1
+    try:
+        import fitz
+
+        with fitz.open(path) as doc:
+            return int(doc.page_count)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def initial_estimate_seconds(page_count: int) -> int:
+    """First guess before we know how many wings the PDF has."""
+    per_page = EST_PAGE_SEC + (
+        EST_WINGS_PER_PAGE * EST_WING_COUNT_SEC if config.SYMBOL_COUNT_ENABLED else 0.0
+    )
+    return int(round(max(1, page_count) * per_page))
+
+
+def _apply_eta(job: dict[str, Any], elapsed: float, eta: float) -> None:
+    eta = max(0.0, eta)
+    job["eta_seconds"] = int(round(eta))
+    job["estimated_total_seconds"] = int(round(elapsed + eta))
+    total = elapsed + eta
+    job["progress"] = round(elapsed / total, 4) if total > 0 else 1.0
 
 
 def _now() -> str:
@@ -85,11 +129,51 @@ def prepare_job_folder(job_id: str) -> Path:
     return root
 
 
+def _source_pdf(job_id: str) -> Path | None:
+    source = job_dir(job_id) / SOURCE_DIR
+    if not source.is_dir():
+        return None
+    return next(iter(sorted(source.glob("*.pdf"))), None)
+
+
+# Client info extracted from cover sheets of jobs created before extraction
+# existed — cached per process so each PDF is only parsed once.
+_client_cache: dict[str, dict[str, str]] = {}
+
+
+def ensure_client_info(data: dict[str, Any]) -> None:
+    """Fill data['client'] from the drawing's cover sheet when not set yet."""
+    if data.get("client"):
+        return
+    job_id = str(data.get("id") or "")
+    if not job_id:
+        return
+    cached = _client_cache.get(job_id)
+    if cached is None:
+        pdf = _source_pdf(job_id)
+        client = None
+        if pdf is not None:
+            from pipeline.client_info import extract_client_info
+
+            client = extract_client_info(pdf)
+        cached = client or {}
+        _client_cache[job_id] = cached
+    if cached:
+        data["client"] = dict(cached)
+
+
 def read_job(job_id: str) -> dict[str, Any]:
     path = job_dir(job_id) / "job.json"
     if not path.exists():
         raise FileNotFoundError(job_id)
-    return json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    # Jobs created before size tracking existed: fill in from the stored PDF.
+    if not data.get("size_bytes"):
+        pdf = _source_pdf(job_id)
+        if pdf is not None:
+            data["size_bytes"] = pdf.stat().st_size
+    ensure_client_info(data)
+    return data
 
 
 def write_job(job_id: str, data: dict[str, Any]) -> None:
@@ -112,11 +196,34 @@ def create_job(job_id: str, filename: str, source: Path) -> dict[str, Any]:
         "stage": "queued",
         "message": "Waiting to start",
         "filename": filename,
+        "size_bytes": stored.stat().st_size,
         "created_at": _now(),
         "updated_at": _now(),
         "pages": [],
         "error": None,
     }
+    # Best-effort Bill To details from the cover sheet's title block.
+    try:
+        from pipeline.client_info import extract_client_info
+
+        client = extract_client_info(stored)
+        if client:
+            data["client"] = client
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not extract client info for %s", job_id, exc_info=True)
+    # Upfront time estimate for the UI: wings are unknown until pages are
+    # processed, so start from the page count and typical wings-per-page.
+    page_count = _pdf_page_count(stored)
+    if page_count:
+        data["page_count"] = page_count
+        estimate = initial_estimate_seconds(page_count)
+        data["estimated_total_seconds"] = estimate
+        data["eta_seconds"] = estimate
+        data["progress"] = 0.0
+        data["message"] = (
+            f"Waiting to start — {page_count} page(s), "
+            f"estimated ~{max(1, round(estimate / 60))} min"
+        )
     write_job(job_id, data)
     return data
 
@@ -292,6 +399,7 @@ def process_job(job_id: str, *, on_progress: ProgressFn | None = None) -> dict[s
 
     job = read_job(job_id)
     root = job_dir(job_id)
+    started = time.monotonic()
     try:
         originals = list((root / SOURCE_DIR).iterdir())
         if not originals:
@@ -300,8 +408,13 @@ def process_job(job_id: str, *, on_progress: ProgressFn | None = None) -> dict[s
 
         sheet_notes_info = None
         if source.suffix.lower() == ".pdf":
-            _set_stage(job, "extracting", "Extracting requirements, symbols, and sheet notes")
-            progress("extracting", "Extracting requirements, symbols, and sheet notes")
+            extract_msg = (
+                "Extracting requirements, symbols, and sheet notes"
+                if config.SHEET_NOTES_ENABLED
+                else "Extracting requirements and symbols"
+            )
+            _set_stage(job, "extracting", extract_msg)
+            progress("extracting", extract_msg)
 
             def extraction_progress(message: str) -> None:
                 _set_stage(job, "extracting", message)
@@ -320,6 +433,11 @@ def process_job(job_id: str, *, on_progress: ProgressFn | None = None) -> dict[s
         progress("rendering", f"Rendering {source.name}")
         page_paths = render_pages(source, root / PAGES_DIR)
         job["page_count"] = len(page_paths)
+        _apply_eta(
+            job,
+            time.monotonic() - started,
+            initial_estimate_seconds(len(page_paths)),
+        )
 
         scans: dict[int, PageScan] = {}
         if source.suffix.lower() == ".pdf":
@@ -343,9 +461,36 @@ def process_job(job_id: str, *, on_progress: ProgressFn | None = None) -> dict[s
         pages_out: list[dict[str, Any]] = []
         diagram_count = 0
         wing_count = 0
+        loop_started = time.monotonic()
         for page_index, page_path in enumerate(page_paths, start=1):
             page_key = page_path.stem
             scan = scans.get(page_index)
+
+            # Refine the ETA from real timings: pages processed so far give the
+            # per-page speed, and the wings found so far predict how many wings
+            # the remaining pages will add to the counting stage.
+            pages_done = page_index - 1
+            per_page = (
+                (time.monotonic() - loop_started) / pages_done
+                if pages_done
+                else EST_PAGE_SEC
+            )
+            wings_per_page = (
+                wing_count / pages_done if pages_done else EST_WINGS_PER_PAGE
+            )
+            pages_left = len(page_paths) - pages_done
+            predicted_wings = wing_count + pages_left * wings_per_page
+            count_eta = (
+                predicted_wings * EST_WING_COUNT_SEC
+                if config.SYMBOL_COUNT_ENABLED
+                else 0.0
+            )
+            _apply_eta(
+                job,
+                time.monotonic() - started,
+                pages_left * per_page + count_eta,
+            )
+
             _set_stage(
                 job,
                 "classifying",
@@ -415,8 +560,15 @@ def process_job(job_id: str, *, on_progress: ProgressFn | None = None) -> dict[s
             on_diagram = {point["name"] for point in label_points}
             pdf_hints = [hint for hint in pdf_hints if hint["name"] in on_diagram]
             wing_map = _merge_wing_maps(llm_wings, pdf_hints, label_points)
-            if not wing_map and config.VISION_REQUIRE_LLM:
-                raise RuntimeError(f"Vision model returned no wing regions for {page_key}")
+            if not wing_map:
+                page_path.unlink(missing_ok=True)
+                page_record["kept"] = False
+                page_record["reason"] = "vision model returned no wing regions"
+                pages_out.append(page_record)
+                job["pages"] = pages_out
+                write_job(job_id, job)
+                logger.warning("Skipping %s — no wing regions from vision/PDF text", page_key)
+                continue
             tag_points = _points_on_diagram(
                 scan.room_tags if scan else [],
                 page_size=page_image.size,
@@ -571,12 +723,70 @@ def process_job(job_id: str, *, on_progress: ProgressFn | None = None) -> dict[s
         if sheet_notes_info is not None:
             job["diagram_notes_written"] = finalize_sheet_notes(sheet_notes_info, root)
 
+        # YOLO symbol count on zoom tiles → pricing invoice
+        if config.SYMBOL_COUNT_ENABLED:
+            _set_stage(job, "counting", "Running YOLO symbol detection on zoom tiles")
+
+            # Every wing folder about to be scanned reports in through the
+            # progress callback, so the ETA can follow the real per-wing speed.
+            folders_total = sum(
+                1
+                for page in pages_out
+                if page.get("kept")
+                for wing in page.get("wings") or []
+                if wing.get("zooms_manifest") or wing.get("zooms_full_image")
+            )
+            count_started = time.monotonic()
+            count_state = {"started": 0}
+
+            def _count_progress(stage: str, msg: str) -> None:
+                if stage == "counting" and msg.startswith("YOLO on"):
+                    count_state["started"] += 1
+                    finished = count_state["started"] - 1
+                    per_folder = (
+                        (time.monotonic() - count_started) / finished
+                        if finished > 0
+                        else EST_WING_COUNT_SEC
+                    )
+                    left = max(0, folders_total - finished)
+                    _apply_eta(job, time.monotonic() - started, left * per_folder)
+                _set_stage(job, stage, msg)
+
+            count_payload = run_symbol_count_stage(
+                root,
+                pages_out,
+                job_id=job_id,
+                progress=_count_progress,
+            )
+            invoice = count_payload.get("invoice") or {}
+            job["symbol_count_total"] = count_payload.get("total_count", 0)
+            job["symbol_count_rows"] = len(count_payload.get("rows") or [])
+            job["counts_path"] = f"{COUNTS_DIR}/result.json"
+            job["invoice_path"] = f"{COUNTS_DIR}/invoice.json"
+            job["invoice_csv_path"] = f"{COUNTS_DIR}/invoice.csv"
+            job["invoice_grand_total_usd"] = invoice.get("grand_total_usd")
+            job["invoice_subtotal_usd"] = invoice.get("subtotal_usd")
+            job["yolo_enabled"] = bool(count_payload.get("yolo_enabled"))
+            job["yolo_model"] = count_payload.get("yolo_model")
+        else:
+            count_payload = None
+
         job["status"] = "done"
         job["stage"] = "done"
-        job["message"] = (
-            f"Done — {diagram_count} diagram(s) and {wing_count} wing image(s) "
-            f"from {kept_pages} of {len(page_paths)} page(s)"
-        )
+        job["progress"] = 1.0
+        job["eta_seconds"] = 0
+        job["actual_seconds"] = int(round(time.monotonic() - started))
+        if count_payload and count_payload.get("method") == "yolo":
+            job["message"] = (
+                f"Done — {diagram_count} diagram(s), {wing_count} wing(s), "
+                f"{job.get('symbol_count_total', 0)} symbols counted, "
+                f"invoice ${job.get('invoice_grand_total_usd', 0):.2f}"
+            )
+        else:
+            job["message"] = (
+                f"Done — {diagram_count} diagram(s) and {wing_count} wing image(s) "
+                f"from {kept_pages} of {len(page_paths)} page(s)"
+            )
 
         write_job(job_id, job)
         _write_summary(root, job, pages_out)

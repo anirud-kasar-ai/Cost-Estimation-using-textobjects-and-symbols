@@ -1,0 +1,212 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-soft: var(--brand-soft);
+  --color-orange: var(--orange);
+  --color-orange-foreground: var(--orange-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, sans-serif;
+}
+
+/* Aziro brand palette — shared across AIML projects
+   Innovative Blue #3058a6 · Fun-Filled Orange #f47920
+   Growing Green #36a692 · Passionate Red #db3e4d · Optimistic Yellow #f0bb21 */
+
+:root {
+  --radius: 0.75rem;
+  --background: hsl(0 0% 98.5%);
+  --foreground: hsl(219 60% 12%);
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(219 60% 12%);
+  --popover: hsl(0 0% 100%);
+  --popover-foreground: hsl(219 60% 12%);
+  --primary: hsl(219 56% 42%);
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: hsl(219 40% 95%);
+  --secondary-foreground: hsl(219 56% 25%);
+  --muted: hsl(219 25% 94%);
+  --muted-foreground: hsl(219 18% 38%);
+  --accent: hsl(22 91% 54%);
+  --accent-foreground: hsl(0 0% 100%);
+  --destructive: hsl(354 68% 55%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(219 30% 88%);
+  --input: hsl(219 30% 88%);
+  --ring: hsl(22 91% 54%);
+
+  /* brand — constant across themes */
+  --brand: hsl(219 56% 42%);
+  --brand-foreground: hsl(0 0% 100%);
+  --brand-soft: hsl(219 40% 93%);
+  --orange: hsl(22 91% 54%);
+  --orange-foreground: hsl(0 0% 100%);
+
+  --success: hsl(170 50% 40%);
+  --warning: hsl(46 88% 50%);
+  --danger: hsl(354 68% 55%);
+
+  --chart-1: hsl(219 56% 42%);
+  --chart-2: hsl(22 91% 54%);
+  --chart-3: hsl(170 50% 43%);
+  --chart-4: hsl(46 88% 53%);
+  --chart-5: hsl(219 25% 55%);
+  --chart-6: hsl(354 68% 55%);
+
+  /* sidebar stays dark navy in both themes */
+  --sidebar: hsl(219 50% 14%);
+  --sidebar-foreground: hsl(219 20% 90%);
+  --sidebar-muted: hsl(219 15% 62%);
+  --sidebar-accent: hsl(219 45% 20%);
+  --sidebar-border: hsl(219 40% 22%);
+
+  /* brand glows */
+  --glow: hsl(22 91% 54%);
+  --glow-secondary: hsl(219 56% 42%);
+  --glow-tertiary: hsl(46 88% 53%);
+}
+
+.dark {
+  --background: hsl(219 55% 5%);
+  --foreground: hsl(0 0% 96%);
+  --card: hsl(219 50% 8%);
+  --card-foreground: hsl(0 0% 96%);
+  --popover: hsl(219 50% 8%);
+  --popover-foreground: hsl(0 0% 96%);
+  --primary: hsl(219 75% 62%);
+  --primary-foreground: hsl(219 55% 6%);
+  --secondary: hsl(219 35% 13%);
+  --secondary-foreground: hsl(0 0% 95%);
+  --muted: hsl(219 30% 13%);
+  --muted-foreground: hsl(219 15% 60%);
+  --accent: hsl(22 95% 60%);
+  --accent-foreground: hsl(219 55% 6%);
+  --destructive: hsl(354 72% 60%);
+  --destructive-foreground: hsl(0 0% 100%);
+  --border: hsl(219 30% 16%);
+  --input: hsl(219 30% 16%);
+  --ring: hsl(22 95% 60%);
+
+  --brand-soft: hsl(219 40% 16%);
+  --success: hsl(170 55% 48%);
+  --warning: hsl(46 88% 58%);
+  --danger: hsl(354 70% 62%);
+
+  --chart-1: hsl(219 75% 62%);
+  --chart-2: hsl(22 95% 60%);
+  --chart-3: hsl(170 60% 50%);
+  --chart-4: hsl(46 92% 58%);
+  --chart-5: hsl(219 20% 55%);
+  --chart-6: hsl(354 72% 60%);
+
+  --sidebar: hsl(219 55% 6%);
+  --sidebar-foreground: hsl(0 0% 92%);
+  --sidebar-muted: hsl(219 12% 58%);
+  --sidebar-accent: hsl(219 35% 12%);
+  --sidebar-border: hsl(219 30% 16%);
+
+  --glow: hsl(22 95% 60%);
+  --glow-secondary: hsl(219 75% 62%);
+  --glow-tertiary: hsl(46 92% 58%);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+  }
+}
+
+@utility card-surface {
+  background-color: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 2px hsl(219 60% 12% / 0.05);
+}
+
+@utility glow-border {
+  box-shadow:
+    0 0 20px hsl(22 91% 54% / 0.15),
+    0 0 60px hsl(219 56% 42% / 0.08);
+}
+
+@utility gradient-text {
+  color: var(--color-accent);
+}
+
+@utility gradient-bg {
+  position: relative;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 50% at 20% 40%, hsl(219 56% 42% / 0.06), transparent 70%),
+      radial-gradient(ellipse 60% 40% at 80% 60%, hsl(22 91% 54% / 0.05), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  & > * {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

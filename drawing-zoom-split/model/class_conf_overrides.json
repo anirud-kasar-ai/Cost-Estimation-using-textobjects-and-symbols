@@ -1,0 +1,16 @@
+{
+  "symbol_detector_best": {
+    "CURB": 0.5,
+    "EXHAUST FAN": 0.5,
+    "PIPE PENETRATION": 0.5,
+    "ROOF DRAIN": 0.5
+  },
+  "symbol_detector_tech": {
+    "CONDUIT STUB": 0.6,
+    "DATA RACK": 0.7,
+    "INTERIOR SPEAKER": 0.4,
+    "INTERIOR WIRELESS ACESS POINT": 0.6,
+    "PLUMBING STACK": 0.5,
+    "WALL MOUNT": 0.6
+  }
+}

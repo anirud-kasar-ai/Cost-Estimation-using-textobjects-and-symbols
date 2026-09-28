@@ -1,13 +1,13 @@
 # Setup guide
 
-Tracked tools: **dual-pathway-drawing-split** (PDF → zoom tiles) plus **symbol-count-vision** (symbol counts).
+Tracked tools: **dual-pathway-drawing-split** (PDF → zoom tiles), **symbol-count-vision** (CV + Gemini symbol counts), and **legend-ocr-count** (numbered legend + OCR callout counts).
 
 ## Prerequisites
 
 - **Python 3.10+** (3.11 recommended)
 - Git
-- [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) (for symbol-count-vision)
-- API keys: `GROQ_API_KEY` (drawing split); `GEMINI_API_KEY` (symbol count)
+- [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) (for symbol-count-vision and legend-ocr-count)
+- API keys: `GROQ_API_KEY` (drawing split); `GEMINI_API_KEY` (symbol count). Legend OCR needs no API key.
 
 ## 1. Clone
 
@@ -60,3 +60,22 @@ dual-pathway-drawing-split/storage/jobs/<job>/04_wings/<WING>/zooms/page_XXX/
 ```
 
 **Do not commit `.env`.** Keys stay local; only `.env.example` is tracked.
+
+## 4. Legend OCR callout count
+
+Full steps: [`legend-ocr-count/SETUP.md`](legend-ocr-count/SETUP.md)
+
+```bash
+cd legend-ocr-count
+python -m venv .venv
+# Windows: .\.venv\Scripts\Activate.ps1
+# macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env   # Windows: copy .env.example .env
+# Optional: set TESSERACT_CMD if tesseract is not on PATH
+uvicorn app:app --reload --reload-dir pipeline --reload-dir static --host 127.0.0.1 --port 8768
+```
+
+Open http://127.0.0.1:8768
+
+Upload a numbered SYMBOL LEGEND image/PDF plus a single plan image or a folder of plans. Counts are OCR callout detections matched to the legend (no YOLO).

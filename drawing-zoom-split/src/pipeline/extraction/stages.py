@@ -105,7 +105,10 @@ def _load_extraction_cache(
     extraction_path = cache_root / "extraction.json"
     symbol_path = cache_root / "symbol_table.json"
     notes_path = cache_root / "sheet_notes.json"
-    if not all(path.is_file() for path in (manifest_path, extraction_path, symbol_path, notes_path)):
+    required = [manifest_path, extraction_path, symbol_path]
+    if config.SHEET_NOTES_ENABLED:
+        required.append(notes_path)
+    if not all(path.is_file() for path in required):
         return None
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -113,9 +116,22 @@ def _load_extraction_cache(
             return None
         result = json.loads(extraction_path.read_text(encoding="utf-8"))
         shutil.copy2(symbol_path, job_root / "symbol_table.json")
-        shutil.copy2(notes_path, job_root / "sheet_notes.json")
-        notes_data = json.loads(notes_path.read_text(encoding="utf-8"))
-        sheet_notes = _sheet_notes_from_json(notes_data)
+        sheet_notes: SheetNotesInfo | None = None
+        if config.SHEET_NOTES_ENABLED:
+            shutil.copy2(notes_path, job_root / "sheet_notes.json")
+            notes_data = json.loads(notes_path.read_text(encoding="utf-8"))
+            sheet_notes = _sheet_notes_from_json(notes_data)
+        else:
+            # Cached result may predate the flag; strip sheet-note fields.
+            result.update(
+                {
+                    "sheet_notes": None,
+                    "sheet_notes_pdf_path": None,
+                    "has_sheet_notes_pdf": False,
+                    "sheet_notes_json_path": None,
+                    "sheet_notes_item_count": 0,
+                }
+            )
         legend = load_symbol_table_json(job_root / "symbol_table.json")
         if legend is not None:
             _save_glyph_templates(legend, job_root / "07_glyphs")
@@ -316,12 +332,17 @@ def run_extraction_stages(
         _progress("Loaded cached requirements, symbols, and sheet notes")
         return cached
 
-    _progress("Extracting requirements, symbol legend, and sheet notes…")
     tasks = {
         "requirements": lambda: _extract_requirement(pdf_path, source_filename),
         "symbol legend": lambda: _extract_technical_symbol(pdf_path, source_filename),
-        "sheet notes": lambda: _extract_sheet_notes(pdf_path, source_filename, job_root),
     }
+    if config.SHEET_NOTES_ENABLED:
+        _progress("Extracting requirements, symbol legend, and sheet notes…")
+        tasks["sheet notes"] = lambda: _extract_sheet_notes(
+            pdf_path, source_filename, job_root
+        )
+    else:
+        _progress("Extracting requirements and symbol legend (sheet notes disabled)…")
     results: dict[str, tuple[Any, str | None]] = {}
     with ThreadPoolExecutor(max_workers=3) as pool:
         futures = {pool.submit(fn): label for label, fn in tasks.items()}
@@ -332,7 +353,7 @@ def run_extraction_stages(
 
     requirement, requirement_pdf_path = results["requirements"]
     technical_symbol, technical_symbol_pdf_path = results["symbol legend"]
-    sheet_notes, sheet_notes_pdf_path = results["sheet notes"]
+    sheet_notes, sheet_notes_pdf_path = results.get("sheet notes", (None, None))
 
     notes_json_path: str | None = None
     if sheet_notes is not None:

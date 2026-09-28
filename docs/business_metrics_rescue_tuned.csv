@@ -1,0 +1,10 @@
+Model,Classes,Mode,Images,Actual objects,Correctly identified,Object recall,Wrong class,Missed,Total detections,False detections,Object precision,Object F1,Rescued symbols matched
+Main symbol detector (52 classes),52,single-pass (before),256,1176,1078,0.9167,0,98,1435,357,0.7512,0.8257,0
+Main symbol detector (52 classes),52,two-pass rescue (after),256,1176,1087,0.9243,1,88,1569,481,0.6928,0.7920,9
+Main symbol detector (52 classes),52,tuned (rescue 0.25 + class thresholds),256,1176,1075,0.9141,0,101,1415,340,0.7597,0.8298,3
+Roof symbol detector (9 classes),9,single-pass (before),32,283,244,0.8622,5,34,537,288,0.4544,0.5951,0
+Roof symbol detector (9 classes),9,two-pass rescue (after),32,283,252,0.8905,6,25,680,422,0.3706,0.5234,8
+Roof symbol detector (9 classes),9,tuned (rescue 0.25 + class thresholds),32,283,228,0.8057,5,50,409,176,0.5575,0.6590,1
+Overall (both models),52+9,single-pass (before),288,1459,1322,0.9061,5,132,1972,645,0.6704,0.7706,0
+Overall (both models),52+9,two-pass rescue (after),288,1459,1339,0.9178,7,113,2249,903,0.5954,0.7222,17
+Overall (both models),52+9,tuned (rescue 0.25 + class thresholds),288,1459,1303,0.8931,5,151,1824,516,0.7144,0.7938,4

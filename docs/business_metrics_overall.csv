@@ -1,0 +1,7 @@
+Stage,Model,Classes,Mode,Images,Actual objects,Correctly identified,Object recall,Wrong class,Missed,Total detections,False detections,Object precision,Object F1,Rescued symbols matched
+BEFORE retrain (old roof model),Overall (both models),52+9,single-pass (before),288,1459,1322,0.9061,5,132,1972,645,0.6704,0.7706,0
+BEFORE retrain (old roof model),Overall (both models),52+9,two-pass rescue (after),288,1459,1339,0.9178,7,113,2249,903,0.5954,0.7222,17
+BEFORE retrain (old roof model),Overall (both models),52+9,tuned (rescue 0.25 + class thresholds),288,1459,1303,0.8931,5,151,1824,516,0.7144,0.7938,4
+AFTER retrain (new roof model + TTA fix),Overall (both models),52+9,single-pass (before),288,1459,1364,0.9349,6,89,2054,684,0.6641,0.7765,0
+AFTER retrain (new roof model + TTA fix),Overall (both models),52+9,two-pass rescue (after),288,1459,1375,0.9424,6,78,2162,781,0.6360,0.7595,11
+AFTER retrain (new roof model + TTA fix),Overall (both models),52+9,tuned (rescue 0.25 + class thresholds),288,1459,1368,0.9376,7,84,2052,677,0.6667,0.7793,8

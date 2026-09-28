@@ -1,0 +1,100 @@
+{
+  "models": [
+    {
+      "name": "Main symbol detector (52 classes)",
+      "floors": {
+        "off": {
+          "recall": 0.9362,
+          "precision": 0.7515,
+          "f1": 0.8338,
+          "rescued_matched": 0,
+          "false_det": 362
+        },
+        "0.15": {
+          "recall": 0.9413,
+          "precision": 0.7202,
+          "f1": 0.8161,
+          "rescued_matched": 6,
+          "false_det": 428
+        },
+        "0.20": {
+          "recall": 0.9396,
+          "precision": 0.7342,
+          "f1": 0.8243,
+          "rescued_matched": 4,
+          "false_det": 398
+        },
+        "0.25": {
+          "recall": 0.9388,
+          "precision": 0.7419,
+          "f1": 0.8288,
+          "rescued_matched": 3,
+          "false_det": 382
+        },
+        "0.30": {
+          "recall": 0.9371,
+          "precision": 0.7476,
+          "f1": 0.8317,
+          "rescued_matched": 1,
+          "false_det": 370
+        }
+      },
+      "tuned_floor": 0.25,
+      "overrides": {
+        "CONDUIT STUB": 0.6,
+        "INTERIOR SPEAKER": 0.4,
+        "INTERIOR WIRELESS ACESS POINT": 0.6,
+        "DATA RACK": 0.7,
+        "PLUMBING STACK": 0.5,
+        "WALL MOUNT": 0.6
+      }
+    },
+    {
+      "name": "Roof symbol detector (9 classes)",
+      "floors": {
+        "off": {
+          "recall": 0.9293,
+          "precision": 0.4465,
+          "f1": 0.6032,
+          "rescued_matched": 0,
+          "false_det": 322
+        },
+        "0.15": {
+          "recall": 0.947,
+          "precision": 0.4288,
+          "f1": 0.5903,
+          "rescued_matched": 5,
+          "false_det": 353
+        },
+        "0.20": {
+          "recall": 0.947,
+          "precision": 0.4344,
+          "f1": 0.5956,
+          "rescued_matched": 5,
+          "false_det": 345
+        },
+        "0.25": {
+          "recall": 0.947,
+          "precision": 0.4379,
+          "f1": 0.5989,
+          "rescued_matched": 5,
+          "false_det": 340
+        },
+        "0.30": {
+          "recall": 0.9329,
+          "precision": 0.4407,
+          "f1": 0.5986,
+          "rescued_matched": 1,
+          "false_det": 331
+        }
+      },
+      "tuned_floor": 0.25,
+      "overrides": {
+        "ROOF DRAIN": 0.5,
+        "EXHAUST FAN": 0.5,
+        "CURB": 0.5,
+        "PIPE PENETRATION": 0.5
+      }
+    }
+  ]
+}

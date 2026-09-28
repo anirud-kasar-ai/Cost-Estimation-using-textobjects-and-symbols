@@ -17,7 +17,7 @@ wing_crop:
 
 roi_zoom:
   tile_size: 653
-  overlap_pct: 0.10
+  overlap_pct: 0.25
 
 verify:
   min_page_ink: 0.008

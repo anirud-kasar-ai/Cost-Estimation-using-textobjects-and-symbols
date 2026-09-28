@@ -386,30 +386,60 @@ class LlamaVisionClient:
         import time as _time
 
         max_retries = 5
+        response = None
+        last_exc: Exception | None = None
         for attempt in range(max_retries):
-            with httpx.Client(timeout=180.0) as client:
-                response = client.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
-                )
-                if (
-                    response.status_code == 400
-                    and "json_validate_failed" in (response.text or "")
-                ):
-                    payload.pop("response_format", None)
-                    payload["reasoning_effort"] = "none"
+            try:
+                with httpx.Client(timeout=180.0) as client:
                     response = client.post(
                         "https://api.groq.com/openai/v1/chat/completions",
                         headers=headers,
                         json=payload,
                     )
-            if response.status_code == 429 and attempt < max_retries - 1:
-                wait = min(2 ** attempt + 1, 30)
-                logger.warning("Groq 429 rate-limited, retrying in %ds (attempt %d/%d)", wait, attempt + 1, max_retries)
+                    if (
+                        response.status_code == 400
+                        and "json_validate_failed" in (response.text or "")
+                    ):
+                        payload.pop("response_format", None)
+                        payload["reasoning_effort"] = "none"
+                        response = client.post(
+                            "https://api.groq.com/openai/v1/chat/completions",
+                            headers=headers,
+                            json=payload,
+                        )
+                if response.status_code in {429, 502, 503, 504} and attempt < max_retries - 1:
+                    wait = min(2 ** attempt + 2, 45)
+                    logger.warning(
+                        "Groq %s, retrying in %ds (attempt %d/%d)",
+                        response.status_code,
+                        wait,
+                        attempt + 1,
+                        max_retries,
+                    )
+                    _time.sleep(wait)
+                    continue
+                break
+            except (
+                httpx.ConnectError,
+                httpx.RemoteProtocolError,
+                httpx.ReadTimeout,
+                httpx.WriteTimeout,
+                httpx.ConnectTimeout,
+            ) as exc:
+                last_exc = exc
+                if attempt >= max_retries - 1:
+                    raise
+                wait = min(2 ** attempt + 2, 45)
+                logger.warning(
+                    "Groq connection error (%s), retrying in %ds (attempt %d/%d)",
+                    type(exc).__name__,
+                    wait,
+                    attempt + 1,
+                    max_retries,
+                )
                 _time.sleep(wait)
-                continue
-            break
+        if response is None:
+            raise RuntimeError(f"Groq API failed after retries: {last_exc}")
         if response.status_code >= 400:
             detail = response.text[:800]
             raise RuntimeError(f"Groq API {response.status_code}: {detail}")

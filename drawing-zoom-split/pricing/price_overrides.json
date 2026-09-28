@@ -1,0 +1,17 @@
+{
+  "CONDUIT STUB": {
+    "unit_price_usd": 98.0,
+    "reason": "Price hike and change the vendor",
+    "updated_at": "2026-09-15T10:11:07Z"
+  },
+  "CURB": {
+    "unit_price_usd": 199.0,
+    "reason": "supplier rate revised",
+    "updated_at": "2026-09-15T10:17:28Z"
+  },
+  "APWP": {
+    "unit_price_usd": 385.0,
+    "reason": "vendor update",
+    "updated_at": "2026-09-24T08:53:12Z"
+  }
+}
