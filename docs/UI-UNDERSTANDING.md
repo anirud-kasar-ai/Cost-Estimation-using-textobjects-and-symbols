@@ -111,7 +111,7 @@ A printable, client-facing cost estimate for the selected project.
 
 The unit-cost table behind every estimate (backed by `pricing/device_prices.csv`).
 
-- Lists every device class with unit, unit price, and last-updated time.
+- Lists every device class with its **symbol image** (a real sample cropped from processed drawings — hover to enlarge; falls back to a letter badge when no drawing containing that symbol has been processed yet), unit, unit price, and last-updated time.
 - **Click a price to edit it** (`PUT /api/pricing/{device_key}`). Manually edited prices are marked "overridden" and are **locked** — they never drift when synthetic prices refresh. An optional reason can be recorded and is shown as a tooltip.
 
 ### 4.5 Model Performance — `/metrics` (`src/routes/metrics.tsx`)
@@ -120,7 +120,7 @@ A dashboard aggregated across **all** finished jobs (`GET /api/stats`).
 
 - KPI cards: total symbols detected, drawings processed, average processing time, active YOLO model.
 - Charts: symbol detections by class and detection share per class.
-- **Class-wise model performance table**: per class — which model(s) were trained on it, detection count, legend match rate, average confidence, and training metrics (mAP50, precision, recall) read from the model checkpoints.
+- **Class-wise model performance table**: per class — its symbol image (same source as the Pricing Catalog; hover to enlarge), which model(s) were trained on it, detection count, legend match rate, average confidence, and training metrics (mAP50, precision, recall) read from the model checkpoints.
 - **Overall model accuracy**: computed from the human corrections saved on the Report page (`1 − |model − human| / human` over all verified lines), plus jobs/lines verified counts.
 - Model inventory: every `.pt` weights file with size, modified date, classes, and which one is active.
 
@@ -155,6 +155,7 @@ Pick **two processed projects** and see them side by side: project details, per-
 | `GET /api/jobs/{id}/requirement.pdf`, `technical-symbol.pdf`, `sheet-notes.pdf` | Report | Download extracted PDFs |
 | `GET /api/jobs/{id}/files/{path}` | Report overlay | Serve wing images from job storage |
 | `GET /api/pricing`, `PUT /api/pricing/{key}` | Pricing | Read catalog, set price overrides |
+| `GET /api/pricing/{key}/symbol.png` | Pricing | Sample image of the symbol, cropped from real detections |
 | `GET /api/stats` | Metrics | Cross-job aggregates, per-class metrics, model inventory |
 | `GET /api/health` | — | Runtime/model configuration check |
 

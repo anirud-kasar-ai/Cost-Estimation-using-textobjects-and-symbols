@@ -6,7 +6,8 @@ import { Loader2, Lock, Search } from "lucide-react";
 import { AppShell, APP_NAME, PageHeader } from "@/components/app-shell";
 import { SortableTh, TablePagination, useTable } from "@/components/table-utils";
 import { currency, useEstimator } from "@/lib/estimator-data";
-import { classAbbrev, formatDateTime, updatePrice, type PriceItem } from "@/lib/api";
+import { formatDateTime, updatePrice, type PriceItem } from "@/lib/api";
+import { SymbolThumb } from "@/components/symbol-thumb";
 
 export const Route = createFileRoute("/pricing")({
   head: () => ({
@@ -158,9 +159,7 @@ function PricingPage() {
                     className="border-b border-border/60 last:border-0 hover:bg-accent/50"
                   >
                     <td className="px-4 py-3">
-                      <span className="grid h-8 w-8 place-items-center rounded bg-brand/10 text-xs font-bold text-brand">
-                        {classAbbrev(r.device_key)}
-                      </span>
+                      <SymbolThumb deviceKey={r.device_key} />
                     </td>
                     <td className="px-4 py-3 font-medium">{r.device_key}</td>
                     <td className="px-4 py-3 text-muted-foreground">{r.description}</td>

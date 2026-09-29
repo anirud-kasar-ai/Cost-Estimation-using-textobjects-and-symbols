@@ -299,6 +299,9 @@ export const invoicePdfUrl = (id: string) =>
 export const invoiceCsvUrl = (id: string) =>
   `${API_BASE}/jobs/${encodeURIComponent(id)}/invoice.csv`;
 export const jobZipUrl = (id: string) => `${API_BASE}/jobs/${encodeURIComponent(id)}/zip`;
+/** Sample image of a device symbol, cropped from real detections in processed drawings. */
+export const pricingSymbolUrl = (deviceKey: string) =>
+  `${API_BASE}/pricing/${encodeURIComponent(deviceKey)}/symbol.png`;
 export const legendPdfUrl = (id: string) =>
   `${API_BASE}/jobs/${encodeURIComponent(id)}/technical-symbol.pdf`;
 

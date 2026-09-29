@@ -83,6 +83,9 @@ coverage/
 
 mlruns/
 
+# Office temp/lock files (created while a doc is open)
+~$*
+
 # OS / editors
 .idea/
 .vscode/

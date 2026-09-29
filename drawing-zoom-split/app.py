@@ -594,6 +594,362 @@ def update_price(device_key: str, payload: dict = Body(...)) -> dict:
     item["overridden"] = True
     item["override_reason"] = str(payload.get("reason") or "").strip() or None
     return item
+# YOLO training datasets used as a fallback source of symbol sample images
+# for classes that have not been detected in any processed drawing yet.
+_default_dataset_dirs = ";".join(
+    str(ROOT.parent / "eval_data" / name) for name in ("train_symbo", "train_small")
+)
+SYMBOL_DATASET_DIRS = [
+    Path(p)
+    for p in os.environ.get("SYMBOL_DATASET_DIRS", _default_dataset_dirs).split(";")
+    if p.strip()
+]
+
+
+def _related_keys(key: str, candidate: str) -> bool:
+    """True when one key's words are a subset of the other's (same symbol family).
+
+    e.g. ROOF ACCESS HATCH ~ ROOF HATCH, SURFACE RACEWAY ~ SURFACE RACEWAY WM2300.
+    """
+    a, b = set(key.split()), set(candidate.split())
+    return bool(a and b) and (a <= b or b <= a)
+
+
+def _legend_glyph_sample(key: str, canon) -> Path | None:
+    """Clean symbol image extracted from a drawing's legend table (best source).
+
+    Matches the device key against every job's symbol_table.json rows and the
+    counted rows (legend number -> yolo classes), then resolves the glyph PNG
+    saved under 07_glyphs/. Prefers exact description matches, then legend-
+    number links, then same-family names; ties broken by glyph file size.
+    """
+    import difflib
+    import re as _re
+
+    def _core(text: str) -> str:
+        return canon(_re.split(r"[,–—\-]", text or "", maxsplit=1)[0])
+
+    def _initials(text: str) -> str:
+        words = [w for w in text.split() if w and w[0].isalpha()]
+        return "".join(w[0] for w in words) if len(words) >= 3 else ""
+
+    def _fuzzy(a: str, b: str) -> bool:
+        if not a or not b:
+            return False
+        return difflib.SequenceMatcher(None, a, b).ratio() >= 0.82
+
+    def _fuzzy_token_subset(a: str, b: str) -> bool:
+        """All tokens of the shorter name appear (possibly misspelled) in the longer."""
+        ta, tb = a.split(), b.split()
+        small, big = (ta, tb) if len(ta) <= len(tb) else (tb, ta)
+        if not small:
+            return False
+        for t in small:
+            if t in big:
+                continue
+            if not any(
+                len(t) > 3
+                and len(u) > 3
+                and difflib.SequenceMatcher(None, t, u).ratio() >= 0.85
+                for u in big
+            ):
+                return False
+        return True
+
+    def _glyph_path(gdir: Path, entry: dict, idx: int) -> Path | None:
+        name_key = str(entry.get("symbol") or "").strip() or str(
+            entry.get("description") or ""
+        ).strip()
+        safe = _re.sub(r'[<>:"/\\|?*]', "_", name_key)[:80] or f"entry_{idx}"
+        for cand in (gdir / f"{safe}.png", gdir / f"{safe}_{idx}.png"):
+            if cand.is_file():
+                return cand
+        return None
+
+    best: tuple[tuple[int, int, int, int], Path] | None = None
+
+    def consider(rank: int, path: Path | None) -> None:
+        nonlocal best
+        if path is None:
+            return
+        try:
+            size = path.stat().st_size
+            from PIL import Image
+
+            with Image.open(path) as im:
+                w, h = im.size
+        except OSError:
+            return
+        # Prefer compact, square-ish glyphs — tall/wide crops usually carry
+        # leftover neighbor rows or table rules from the legend sheet — and
+        # SMALLER files: junk-laden crops (extra text/rows) compress bigger.
+        compact = 1 if max(w, h) <= 2.2 * min(w, h) else 0
+        plausible = 1 if size >= 700 else 0  # avoid degenerate slivers
+        if best is None or (rank, plausible, compact, -size) > best[0]:
+            best = ((rank, plausible, compact, -size), path)
+
+    for job in _list_jobs():
+        job_root = config.STORAGE_DIR / job["id"]
+        table_path = job_root / "symbol_table.json"
+        gdir = job_root / "07_glyphs"
+        if not (table_path.is_file() and gdir.is_dir()):
+            continue
+        try:
+            entries = json.loads(table_path.read_text(encoding="utf-8")).get("entries") or []
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        # Legend numbers whose counted row maps to this device key (via the
+        # row description or the YOLO classes assigned to it).
+        linked_numbers: set[str] = set()
+        counts_path = job_root / "06_counts" / "result.json"
+        if counts_path.is_file():
+            try:
+                rows = json.loads(counts_path.read_text(encoding="utf-8")).get("rows") or []
+            except (OSError, json.JSONDecodeError):
+                rows = []
+            for row in rows:
+                desc = str(row.get("description") or "")
+                row_keys = {canon(desc), _core(desc)}
+                row_keys.update(canon(str(c)) for c in (row.get("yolo_classes") or []))
+                if key in row_keys and row.get("number") is not None:
+                    linked_numbers.add(str(row["number"]))
+
+        for idx, entry in enumerate(entries):
+            if not entry.get("has_glyph"):
+                continue
+            desc = str(entry.get("description") or "")
+            dkey, core = canon(desc), _core(desc)
+            symbol = str(entry.get("symbol") or "").strip()
+            symkey = canon(symbol)
+            if key in (dkey, core):
+                rank = 6  # exact description match
+            elif symkey and symkey == key:
+                rank = 5  # legend symbol text matches (e.g. IACP, TEL, NQ-CC)
+            elif symkey and len(symkey) >= 3 and symkey == _initials(key):
+                rank = 4  # legend abbreviation = key initials (e.g. FACP, STC)
+            elif _fuzzy(key, dkey) or _fuzzy(key, core) or _fuzzy_token_subset(key, dkey):
+                rank = 3  # misspelling-tolerant description match
+            elif symbol and symbol in linked_numbers:
+                rank = 2  # counted row links this legend number to the key
+            elif _related_keys(key, dkey) or (core and _related_keys(key, core)):
+                rank = 1  # same symbol family
+            else:
+                continue
+            consider(rank, _glyph_path(gdir, entry, idx))
+    return best[1] if best else None
+
+
+def _job_symbol_sample(key: str, canon) -> tuple[Path, tuple[float, float, float, float]] | None:
+    """Best detection of this class across finished jobs (image path + pixel box).
+
+    Ranked by: exact class match > matched to legend > confidence.
+    """
+    best: tuple[tuple[int, int, float], Path, dict] | None = None
+    for job in _list_jobs():
+        if job.get("status") != "done":
+            continue
+        result_path = config.STORAGE_DIR / job["id"] / "06_counts" / "result.json"
+        if not result_path.is_file():
+            continue
+        try:
+            result = json.loads(result_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        for det in result.get("yolo_detections") or []:
+            det_key = canon(str(det.get("class_name") or ""))
+            if det_key == key:
+                exact = 1
+            elif _related_keys(key, det_key):
+                exact = 0
+            else:
+                continue
+            folder = str(det.get("wing_folder") or "")
+            if not folder:
+                continue
+            wing_dir = config.STORAGE_DIR / job["id"] / folder
+            image = next(
+                (wing_dir / n for n in ("full_wing.jpg", "full_wing.png") if (wing_dir / n).is_file()),
+                None,
+            )
+            if image is None:
+                continue
+            matched = 1 if det.get("legend_number") is not None else 0
+            rank = (exact, matched, float(det.get("confidence") or 0))
+            if best is None or rank > best[0]:
+                best = (rank, image, det)
+    if best is None:
+        return None
+    _, image, det = best
+    return image, (
+        float(det.get("x1") or 0),
+        float(det.get("y1") or 0),
+        float(det.get("x2") or 0),
+        float(det.get("y2") or 0),
+    )
+
+
+def _dataset_symbol_sample(key: str, canon) -> tuple[Path, tuple[float, float, float, float]] | None:
+    """Largest labeled box of this class across the YOLO training datasets."""
+    for dataset_dir in SYMBOL_DATASET_DIRS:
+        sample = _one_dataset_symbol_sample(dataset_dir, key, canon)
+        if sample is not None:
+            return sample
+    return None
+
+
+def _one_dataset_symbol_sample(
+    dataset_dir: Path, key: str, canon
+) -> tuple[Path, tuple[float, float, float, float]] | None:
+    data_yaml = dataset_dir / "data.yaml"
+    labels_dir = dataset_dir / "train" / "labels"
+    images_dir = dataset_dir / "train" / "images"
+    if not (data_yaml.is_file() and labels_dir.is_dir() and images_dir.is_dir()):
+        return None
+    try:
+        import yaml
+
+        names = yaml.safe_load(data_yaml.read_text(encoding="utf-8")).get("names") or []
+    except Exception:  # noqa: BLE001
+        return None
+    exact_ids = {i for i, n in enumerate(names) if canon(str(n)) == key}
+    related_ids = {
+        i for i, n in enumerate(names) if i not in exact_ids and _related_keys(key, canon(str(n)))
+    }
+    if not exact_ids and not related_ids:
+        return None
+
+    def best_box(ids: set[int]) -> tuple[float, Path, tuple[float, ...]] | None:
+        found: tuple[float, Path, tuple[float, ...]] | None = None
+        for label_path in labels_dir.glob("*.txt"):
+            try:
+                lines = label_path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                continue
+            for line in lines:
+                parts = line.split()
+                if len(parts) < 5:
+                    continue
+                try:
+                    cls, cx, cy, w, h = int(parts[0]), *(float(p) for p in parts[1:5])
+                except ValueError:
+                    continue
+                if cls not in ids:
+                    continue
+                area = w * h
+                if found is None or area > found[0]:
+                    found = (area, label_path, (cx, cy, w, h))
+        return found
+
+    hit = best_box(exact_ids) or (best_box(related_ids) if related_ids else None)
+    if hit is None:
+        return None
+    _, label_path, (cx, cy, w, h) = hit
+    image = next(
+        (
+            images_dir / (label_path.stem + ext)
+            for ext in (".jpg", ".jpeg", ".png")
+            if (images_dir / (label_path.stem + ext)).is_file()
+        ),
+        None,
+    )
+    if image is None:
+        return None
+    from PIL import Image
+
+    try:
+        with Image.open(image) as im:
+            width, height = im.size
+    except OSError:
+        return None
+    return image, (
+        (cx - w / 2) * width,
+        (cy - h / 2) * height,
+        (cx + w / 2) * width,
+        (cy + h / 2) * height,
+    )
+
+
+@app.get("/api/pricing/{device_key}/symbol.png")
+def pricing_symbol(device_key: str, refresh: bool = False) -> FileResponse:
+    """Sample image of a device symbol.
+
+    Sources, in order: clean glyph extracted from a drawing's legend table,
+    best YOLO detection across finished jobs, then a labeled sample from the
+    training dataset, allowing close same-family class names
+    (e.g. ROOF ACCESS HATCH -> ROOF HATCH). Cached under storage/_symbol_thumbs/.
+    """
+    import re as _re
+
+    from pipeline.pricing import _canon_key
+
+    key = _canon_key(device_key)
+    if not key:
+        raise HTTPException(status_code=400, detail="Empty device key")
+    if key == "DEFAULT":
+        raise HTTPException(status_code=404, detail="DEFAULT has no drawn symbol")
+    thumb_dir = config.STORAGE_DIR / "_symbol_thumbs"
+    thumb = thumb_dir / (_re.sub(r"[^A-Z0-9]+", "_", key) + ".png")
+    if thumb.is_file() and not refresh:
+        return FileResponse(thumb, media_type="image/png")
+
+    from PIL import Image
+
+    glyph = _legend_glyph_sample(key, _canon_key)
+    if glyph is not None:
+        try:
+            with Image.open(glyph) as im:
+                out = im.convert("RGB")
+            # Safe cleanup (same helpers the extractor uses): drop isolated
+            # table rules at the edges, then tight-crop to the remaining ink.
+            try:
+                from pipeline.extraction.symbol_table_extractor import (
+                    _erase_separated_edge_rules,
+                    _ink_bbox,
+                    _pad_symbol_cell,
+                )
+
+                out = _erase_separated_edge_rules(out)
+                bbox = _ink_bbox(out)
+                if bbox is not None:
+                    out = _pad_symbol_cell(out.crop(bbox), min_w=96, min_h=72)
+            except Exception:  # noqa: BLE001
+                pass
+            out.thumbnail((160, 160), Image.LANCZOS)
+            thumb_dir.mkdir(parents=True, exist_ok=True)
+            out.save(thumb, format="PNG")
+            return FileResponse(thumb, media_type="image/png")
+        except OSError:
+            logger.warning("Unreadable legend glyph %s — falling back", glyph)
+
+    sample = _job_symbol_sample(key, _canon_key) or _dataset_symbol_sample(key, _canon_key)
+    if sample is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No sample of this symbol in processed drawings or the training dataset",
+        )
+
+    image_path, (x1, y1, x2, y2) = sample
+    try:
+        with Image.open(image_path) as im:
+            im = im.convert("RGB")
+            # ~15% padding around the box so the symbol has context.
+            pad = max(8.0, 0.15 * max(x2 - x1, y2 - y1))
+            box = (
+                max(0, int(x1 - pad)),
+                max(0, int(y1 - pad)),
+                min(im.width, int(x2 + pad)),
+                min(im.height, int(y2 + pad)),
+            )
+            crop = im.crop(box)
+            crop.thumbnail((160, 160), Image.LANCZOS)
+            thumb_dir.mkdir(parents=True, exist_ok=True)
+            crop.save(thumb, format="PNG")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return FileResponse(thumb, media_type="image/png")
+
+
 def _run_job(job_id: str) -> None:
     try:
         process_job(job_id)

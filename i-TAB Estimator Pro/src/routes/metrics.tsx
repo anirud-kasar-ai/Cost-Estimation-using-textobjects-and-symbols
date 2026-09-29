@@ -7,6 +7,7 @@ import { AppShell, APP_NAME, PageHeader } from "@/components/app-shell";
 import { SortableTh, TablePagination, useTable } from "@/components/table-utils";
 import { formatDuration, getStats, type StatsClass } from "@/lib/api";
 import { colorForClass } from "@/lib/class-colors";
+import { SymbolThumb } from "@/components/symbol-thumb";
 
 export const Route = createFileRoute("/metrics")({
   head: () => ({
@@ -226,6 +227,7 @@ function MetricsPage() {
                   <table className="w-full min-w-[880px] text-sm">
                     <thead className="border-b border-border text-left text-xs text-muted-foreground uppercase">
                       <tr>
+                        <th className="px-4 py-3 font-medium">Symbol</th>
                         <SortableTh
                           label="Symbol Class"
                           sortKey="class_name"
@@ -260,6 +262,9 @@ function MetricsPage() {
                             key={c.class_name}
                             className="border-b border-border/60 last:border-0 hover:bg-accent/50"
                           >
+                            <td className="px-4 py-3">
+                              <SymbolThumb deviceKey={c.class_name} />
+                            </td>
                             <td className="px-4 py-3 font-medium">{c.class_name}</td>
                             <td className="px-4 py-3">
                               <div className="flex flex-wrap gap-1">
